@@ -29,7 +29,10 @@ func MergeActivities(garmin []*models.Activity, strava []*models.Activity) []*mo
 			}
 
 			// 2. Start time difference must be within 10 minutes (600s)
-			timeDiff := math.Abs(g.StartTime.Sub(s.StartTime).Seconds())
+			// Compare start times using local wall-clock times to avoid timezone offset mismatches (e.g. UTC vs local timezone)
+			gLocal := time.Date(g.StartTime.Year(), g.StartTime.Month(), g.StartTime.Day(), g.StartTime.Hour(), g.StartTime.Minute(), g.StartTime.Second(), 0, time.UTC)
+			sLocal := time.Date(s.StartTime.Year(), s.StartTime.Month(), s.StartTime.Day(), s.StartTime.Hour(), s.StartTime.Minute(), s.StartTime.Second(), 0, time.UTC)
+			timeDiff := math.Abs(gLocal.Sub(sLocal).Seconds())
 			if timeDiff > 600 {
 				continue
 			}

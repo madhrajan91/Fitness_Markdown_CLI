@@ -614,3 +614,24 @@ func (db *DB) GetRawActivitiesForSync(start, end time.Time) ([]*models.Activity,
 	}
 	return garmin, strava, nil
 }
+
+// HasStravaActivityOnDate returns true if a Strava activity exists on the given date (matching sport type)
+func (db *DB) HasStravaActivityOnDate(t time.Time, sport string) (bool, error) {
+	query := `SELECT 1 FROM activities WHERE provider = 'strava' AND sport = ? AND date(start_time) = date(?) LIMIT 1`
+	var val int
+	err := db.conn.QueryRow(query, sport, t.Format("2006-01-02")).Scan(&val)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// DeleteMatchingGarminActivity deletes Garmin activities matching Strava's date and sport
+func (db *DB) DeleteMatchingGarminActivity(t time.Time, sport string) error {
+	query := `DELETE FROM activities WHERE provider = 'garmin' AND sport = ? AND date(start_time) = date(?)`
+	_, err := db.conn.Exec(query, sport, t.Format("2006-01-02"))
+	return err
+}

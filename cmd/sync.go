@@ -112,6 +112,11 @@ func runSync(cmd *cobra.Command, args []string) {
 		} else {
 			fmt.Printf("  Fetched %d Garmin activities.\n", len(garminActs))
 			for _, a := range garminActs {
+				// Skip if a Strava activity exists on this date
+				hasStrava, err := database.HasStravaActivityOnDate(a.StartTime, a.Sport)
+				if err == nil && hasStrava {
+					continue
+				}
 				if err := database.InsertOrUpdateActivity(a); err != nil {
 					fmt.Printf("  Error saving Garmin activity %d: %v\n", a.ID, err)
 				}
@@ -130,6 +135,9 @@ func runSync(cmd *cobra.Command, args []string) {
 			for _, a := range stravaActs {
 				if err := database.InsertOrUpdateActivity(a); err != nil {
 					fmt.Printf("  Error saving Strava activity %d: %v\n", a.ID, err)
+				} else {
+					// Remove matching Garmin activities to avoid duplicates
+					database.DeleteMatchingGarminActivity(a.StartTime, a.Sport)
 				}
 			}
 		}
@@ -338,6 +346,12 @@ func runImportCache(cmd *cobra.Command, args []string) {
 				continue
 			}
 
+			// Skip if a Strava activity exists on this date
+			hasStrava, err := database.HasStravaActivityOnDate(act.StartTime, act.Sport)
+			if err == nil && hasStrava {
+				continue
+			}
+
 			if err := database.InsertOrUpdateActivity(act); err != nil {
 				fmt.Printf("    Error saving Garmin activity %d: %v\n", act.ID, err)
 			} else {
@@ -382,6 +396,8 @@ func runImportCache(cmd *cobra.Command, args []string) {
 			if err := database.InsertOrUpdateActivity(act); err != nil {
 				fmt.Printf("    Error saving Strava activity %d: %v\n", act.ID, err)
 			} else {
+				// Remove matching Garmin activities to avoid duplicates
+				database.DeleteMatchingGarminActivity(act.StartTime, act.Sport)
 				imported++
 				if imported%500 == 0 {
 					fmt.Printf("    Imported %d Strava activities...\n", imported)
@@ -416,7 +432,6 @@ func runImportCache(cmd *cobra.Command, args []string) {
 		defer dbConn.Close()
 
 		// Get underlying connection to clear table
-		// (Normally we'd expose a ClearAllMergedActivities method, but we can do a trick by passing wide range to ClearMergedActivitiesRange)
 		if err := dbConn.ClearMergedActivitiesRange(startEpoch, endEpoch); err != nil {
 			fmt.Printf("Error clearing merged activities table: %v\n", err)
 			return
