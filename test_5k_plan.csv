@@ -1,0 +1,16 @@
+date,sport,distance_miles,duration_minutes,intensity,notes
+2026-07-20,Run,2.0,20.0,Easy,Easy recovery run
+2026-07-22,Run,3.0,27.0,Tempo,Tempo run (include 1 mile warmup/cooldown)
+2026-07-23,Walk,2.0,30.0,Easy,Rest/active recovery walk
+2026-07-25,Run,4.0,40.0,Long,Long run at comfortable pace
+2026-07-27,Run,2.5,22.0,Easy,Easy run with some strides
+2026-07-29,Run,3.0,25.0,Interval,6x400m intervals with 200m walking rest
+2026-07-30,Walk,2.0,30.0,Easy,Active recovery
+2026-08-01,Run,4.5,45.0,Long,Long run
+2026-08-03,Run,2.5,22.0,Easy,Easy run
+2026-08-05,Run,3.5,30.0,Tempo,Tempo run at target 5K pace
+2026-08-06,Walk,2.0,30.0,Easy,Active recovery
+2026-08-08,Run,5.0,50.0,Long,Long run
+2026-08-10,Run,2.0,18.0,Easy,Taper run
+2026-08-12,Run,2.5,20.0,Interval,Taper intervals (3x400m easy)
+2026-08-15,Run,3.1,25.0,Race,5K Target Race!

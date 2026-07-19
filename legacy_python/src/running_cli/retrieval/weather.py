@@ -48,8 +48,30 @@ def geocode_location(location_name: str) -> Optional[Dict[str, Any]]:
     if not location_name.strip():
         return None
     
-    encoded_name = urllib.parse.quote(location_name.strip())
-    url = f"https://geocoding-api.open-meteo.com/v1/search?name={encoded_name}&count=1"
+    # State mapping for US abbreviations to full names
+    STATE_MAP = {
+        "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California",
+        "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "FL": "Florida", "GA": "Georgia",
+        "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
+        "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+        "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
+        "MT": "Montana", "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey",
+        "NM": "New Mexico", "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio",
+        "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+        "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
+        "VA": "Virginia", "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming"
+    }
+
+    search_name = location_name.strip()
+    filter_state = None
+    if "," in location_name:
+        parts = [p.strip() for p in location_name.split(",")]
+        search_name = parts[0]
+        if len(parts) > 1 and parts[1]:
+            filter_state = parts[1]
+
+    encoded_name = urllib.parse.quote(search_name)
+    url = f"https://geocoding-api.open-meteo.com/v1/search?name={encoded_name}&count=50"
     
     try:
         response = requests.get(url, timeout=10)
@@ -58,28 +80,42 @@ def geocode_location(location_name: str) -> Optional[Dict[str, Any]]:
         
         results = data.get("results")
         if not results:
-            if "," in location_name:
-                first_part = location_name.split(",")[0].strip()
-                return geocode_location(first_part)
             return None
         
-        first = results[0]
-        # Build a pretty formatted name
-        parts = [first.get("name")]
+        selected = None
+        if filter_state:
+            filter_state_lower = filter_state.lower()
+            full_state_name = STATE_MAP.get(filter_state.upper(), "").lower()
+            
+            for res in results:
+                admin1 = res.get("admin1", "")
+                if admin1:
+                    admin1_lower = admin1.lower()
+                    if admin1_lower == filter_state_lower or (full_state_name and admin1_lower == full_state_name):
+                        selected = res
+                        break
+        else:
+            selected = results[0]
+            
+        if not selected:
+            return None
         
-        admin1 = first.get("admin1")
+        # Build a pretty formatted name
+        parts = [selected.get("name")]
+        
+        admin1 = selected.get("admin1")
         if admin1:
             parts.append(admin1)
             
-        country = first.get("country")
+        country = selected.get("country")
         if country:
             parts.append(country)
             
         formatted_name = ", ".join([p for p in parts if p])
         
         return {
-            "lat": first["latitude"],
-            "lon": first["longitude"],
+            "lat": selected["latitude"],
+            "lon": selected["longitude"],
             "name": formatted_name
         }
     except Exception:

@@ -248,6 +248,8 @@ def status():
         click.echo("Strava API: Not configured.")
 
 
+
+
 @cli.command()
 @click.option("--days", default=7, help="Number of days to sync from today. (Default is 7)")
 @click.option("--start-date", help="Sync start date YYYY-MM-DD. Overrides --days.")
@@ -518,9 +520,9 @@ def view(week: Optional[str]):
                 click.echo(f"  * {date_str} - {emoji} {a.title}: {' | '.join(links)}")
 
 
-@cli.command()
+@cli.command(name="open")
 @click.option("--week", help="Date in the target week (YYYY-MM-DD). Defaults to today.")
-def open(week: Optional[str]):
+def open_weekly(week: Optional[str]):
     """Select a merged activity from a specific week and open it in the default web browser."""
     config = load_config()
     
@@ -1081,7 +1083,518 @@ def weather(location: Optional[str], lat: Optional[float], lon: Optional[float],
     click.echo("")
 
 
+@cli.command(name="sync-future-races")
+@click.option("--radius", default=50, help="Search radius in miles from your location.")
+@click.option("--months", default=5, help="Number of months of upcoming races to search.")
+def sync_future_races(radius, months):
+    """Sync upcoming races from RunSignup to FutureRaces.md in Obsidian."""
+    import requests
+    import math
+    import json
+    import re
+    
+    config = load_config()
+    vault_path = get_vault_path(config)
+    if not vault_path:
+        click.secho("Error: Obsidian vault path not configured. Run 'running-cli setup' first.", fg="red", err=True)
+        return
+        
+    obsidian_dir = os.path.join(vault_path, config.get("obsidian_folder", "Running/Weekly"))
+    future_races_path = os.path.join(obsidian_dir, "FutureRaces.md")
+    
+    os.makedirs(obsidian_dir, exist_ok=True)
+    
+    # Read target file or set default template
+    file_content = ""
+    if os.path.exists(future_races_path):
+        with open(future_races_path, 'r') as f:
+            file_content = f.read()
+    else:
+        file_content = """---
+type: race_schedule
+last_updated: ""
+scanned_locations: []
+scanned_months: []
+---
+
+# 🏃‍♂️ Future Races
+
+Curated list of upcoming races found by the Race Finder agent.
+
+%% START_FUTURE_RACES %%
+%% END_FUTURE_RACES %%
+
+## 📝 Custom Notes & Goals
+*Write your race targets, training schedules, or notes here. This section will be preserved when running the sync again.*
+"""
+
+    current_dt = datetime.now()
+    today = current_dt.date()
+    end_date = today + timedelta(days=months * 30.5)
+    
+    start_date_str = today.isoformat()
+    end_date_str = end_date.isoformat()
+    
+    location_name = config.get("weather_location", "Belmont, Massachusetts, United States")
+    center_lat = config.get("weather_lat", 42.39593)
+    center_lon = config.get("weather_lon", -71.17867)
+    
+    zipcode = "02478"  # Default Belmont ZIP
+    zip_match = re.search(r"\b\d{5}\b", location_name)
+    if zip_match:
+        zipcode = zip_match.group(0)
+    else:
+        city = location_name
+        state = ""
+        if "," in location_name:
+            parts = [p.strip() for p in location_name.split(",")]
+            city = parts[0]
+            if len(parts) > 1:
+                state = parts[1]
+                
+        STATE_MAP = {
+            "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California",
+            "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "FL": "Florida", "GA": "Georgia",
+            "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
+            "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+            "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
+            "MT": "Montana", "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey",
+            "NM": "New Mexico", "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio",
+            "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+            "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
+            "VA": "Virginia", "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming"
+        }
+        full_state_name = STATE_MAP.get(state.upper(), state).lower()
+        
+        try:
+            url = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(city)}&count=50"
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                results = r.json().get("results", [])
+                for res in results:
+                    admin1 = res.get("admin1", "")
+                    if admin1:
+                        admin1_lower = admin1.lower()
+                        if admin1_lower == state.lower() or admin1_lower == full_state_name:
+                            postcodes = res.get("postcodes", [])
+                            if postcodes:
+                                zipcode = postcodes[0]
+                                break
+        except Exception:
+            pass
+
+    click.echo(f"Resolving future races within {radius} miles of {location_name} (ZIP: {zipcode})...")
+    click.echo(f"Date range: {start_date_str} to {end_date_str}")
+    
+    races_collected = []
+    page = 1
+    while True:
+        params = {
+            'format': 'json',
+            'zipcode': zipcode,
+            'radius': radius,
+            'start_date': start_date_str,
+            'end_date': end_date_str,
+            'events': 'T',
+            'results_per_page': 100,
+            'page': page
+        }
+        try:
+            r = requests.get("https://api.runsignup.com/rest/races", params=params, timeout=15)
+            r.raise_for_status()
+            races = r.json().get('races', [])
+            if not races:
+                break
+            races_collected.extend(races)
+            if len(races) < 100:
+                break
+            page += 1
+        except Exception as e:
+            click.secho(f"API Error fetching races page {page}: {e}", fg="red", err=True)
+            break
+            
+    if not races_collected:
+        click.secho("No upcoming races found matching the criteria.", fg="yellow")
+        return
+        
+    CACHE_DIR = os.path.expanduser("~/.running_cli")
+    CACHE_FILE = os.path.join(CACHE_DIR, "geocoding_cache.json")
+    geocoding_cache = {}
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r') as f:
+                geocoding_cache = json.load(f)
+        except Exception:
+            pass
+            
+    def geocode_city_state(city_val, state_val):
+        key = f"{city_val.strip().lower()}, {state_val.strip().lower()}"
+        if key in geocoding_cache:
+            return geocoding_cache[key]
+        from running_cli.retrieval.weather import geocode_location
+        res = geocode_location(f"{city_val}, {state_val}")
+        if res:
+            geocoding_cache[key] = [res["lat"], res["lon"]]
+            os.makedirs(CACHE_DIR, exist_ok=True)
+            try:
+                with open(CACHE_FILE, 'w') as f_out:
+                    json.dump(geocoding_cache, f_out, indent=2)
+            except Exception:
+                pass
+            return geocoding_cache[key]
+        return None
+        
+    def haversine_distance(lat1, lon1, lat2, lon2):
+        R = 3958.8
+        d_lat = math.radians(lat2 - lat1)
+        d_lon = math.radians(lon2 - lon1)
+        a = (math.sin(d_lat / 2) ** 2 +
+             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+             math.sin(d_lon / 2) ** 2)
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return R * c
+        
+    def get_normalized_distance(event_name, distance_str):
+        text = f"{event_name or ''} {distance_str or ''}".lower()
+        if "half marathon" in text or "half-marathon" in text or "13.1" in text:
+            return "Half Marathon"
+        elif "marathon" in text or "26.2" in text:
+            return "Marathon"
+        elif "10k" in text or "10 k" in text or "6.2" in text:
+            return "10K"
+        elif "5k" in text or "5 k" in text or "3.1" in text:
+            return "5K"
+        return None
+        
+    def get_event_fee(event_obj, current_time):
+        periods = event_obj.get("registration_periods", [])
+        if not periods:
+            return None
+        for p in periods:
+            open_str = p.get("registration_opens")
+            close_str = p.get("registration_closes")
+            fee = p.get("race_fee")
+            if not fee:
+                continue
+            if open_str and close_str:
+                for fmt in ("%m/%d/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
+                    try:
+                        open_dt = datetime.strptime(open_str, fmt)
+                        close_dt = datetime.strptime(close_str, fmt)
+                        if open_dt <= current_time <= close_dt:
+                            return fee
+                    except ValueError:
+                        pass
+        return periods[0].get("race_fee")
+        
+    def get_event_status(event_obj, current_time):
+        periods = event_obj.get("registration_periods", [])
+        if not periods:
+            return "Open"
+            
+        parsed_periods = []
+        for p in periods:
+            open_str = p.get("registration_opens")
+            close_str = p.get("registration_closes")
+            fee_str = p.get("race_fee")
+            if not open_str or not close_str or not fee_str:
+                continue
+            for fmt in ("%m/%d/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    open_dt = datetime.strptime(open_str, fmt)
+                    close_dt = datetime.strptime(close_str, fmt)
+                    fee = float(fee_str.replace("$", "").replace(",", ""))
+                    parsed_periods.append({
+                        "open_dt": open_dt,
+                        "close_dt": close_dt,
+                        "fee": fee,
+                        "fee_str": fee_str,
+                        "close_str": close_str
+                    })
+                    break
+                except ValueError:
+                    pass
+                    
+        parsed_periods.sort(key=lambda x: x["open_dt"])
+        
+        active_period = None
+        next_period = None
+        for idx, p in enumerate(parsed_periods):
+            if p["open_dt"] <= current_time <= p["close_dt"]:
+                active_period = p
+                if idx + 1 < len(parsed_periods):
+                    next_period = parsed_periods[idx + 1]
+                break
+                
+        if active_period:
+            if next_period and next_period["fee"] > active_period["fee"]:
+                inc_date = active_period["close_dt"].strftime("%b %d")
+                return f"Open (Price increases {inc_date})"
+            return "Open"
+            
+        if parsed_periods and all(p["open_dt"] > current_time for p in parsed_periods):
+            first_open = parsed_periods[0]["open_dt"].strftime("%b %d")
+            return f"TBD (Reg opens {first_open})"
+            
+        if parsed_periods and all(p["close_dt"] < current_time for p in parsed_periods):
+            return "Closed"
+            
+        return "Open"
+
+    def get_race_capacities(race_id, events_to_check):
+        caps = {}
+        detail_url = f"https://api.runsignup.com/rest/race/{race_id}?format=json&include_participant_caps=T"
+        try:
+            detail_res = requests.get(detail_url, timeout=10).json()
+            race_detail = detail_res.get("race", {})
+            for ev in race_detail.get("events", []):
+                ev_id = ev.get("event_id")
+                cap = ev.get("participant_cap")
+                if cap:
+                    caps[ev_id] = {
+                        "name": ev.get("name"),
+                        "cap": int(cap)
+                    }
+        except Exception:
+            pass
+            
+        find_url = f"https://runsignup.com/Race/FindARunner/?raceId={race_id}"
+        counts = {}
+        total_participants = None
+        try:
+            html = requests.get(find_url, timeout=10).text
+            matches = re.findall(r"<dt>\s*(.*?)\s*:</dt>\s*<dd>\s*(\d+)\s*</dd>", html, re.DOTALL)
+            for name, cnt in matches:
+                counts[name.strip().lower()] = int(cnt)
+            total_match = re.search(r"Total Event Participants:\s*<b>\s*(\d+)\s*</b>", html)
+            if total_match:
+                total_participants = int(total_match.group(1))
+        except Exception:
+            pass
+            
+        results = {}
+        for ev in events_to_check:
+            ev_id = ev.get("event_id")
+            name = ev.get("name", "")
+            
+            count = counts.get(name.lower())
+            if count is None:
+                if len(events_to_check) == 1 and total_participants is not None:
+                    count = total_participants
+                else:
+                    count = 0
+            
+            cap_info = caps.get(ev_id)
+            if cap_info:
+                cap = cap_info["cap"]
+                pct = (count / cap) * 100 if cap > 0 else 0.0
+                if pct >= 100.0:
+                    results[ev_id] = f"Sold Out ({count}/{cap})"
+                else:
+                    results[ev_id] = f"{count}/{cap} ({pct:.1f}%)"
+            else:
+                if count > 0:
+                    results[ev_id] = f"{count} reg"
+                else:
+                    results[ev_id] = "Open"
+        return results
+
+    distance_order = ["5K", "10K", "Half Marathon", "Marathon"]
+    processed_races = []
+    
+    for r_entry in races_collected:
+        race = r_entry.get('race', {})
+        if race.get('is_draft_race') == 'T' or race.get('is_private_race') == 'T':
+            continue
+            
+        date_str = race.get('next_date')
+        if not date_str:
+            continue
+            
+        try:
+            race_date = datetime.strptime(date_str, "%m/%d/%Y").date()
+            if race_date < today or race_date > end_date:
+                continue
+            date_col = race_date.isoformat()
+        except Exception:
+            continue
+            
+        events = race.get('events', [])
+        matching_events = []
+        
+        for ev in events:
+            if ev.get('volunteer') == 'T':
+                continue
+            name_lower = (ev.get('name') or "").lower()
+            if "virtual" in name_lower:
+                continue
+            
+            # Ensure the event matches the upcoming race date
+            start_time = ev.get('start_time')
+            if start_time and date_str and not start_time.startswith(date_str):
+                continue
+                
+            norm_dist = get_normalized_distance(ev.get('name'), ev.get('distance'))
+            if norm_dist:
+                fee = get_event_fee(ev, current_dt)
+                status = get_event_status(ev, current_dt)
+                matching_events.append({
+                    "name": ev.get('name'),
+                    "norm_dist": norm_dist,
+                    "fee": fee,
+                    "status": status,
+                    "raw_event": ev,
+                    "event_id": ev.get("event_id")
+                })
+                
+        if not matching_events:
+            continue
+            
+        dist_groups = {}
+        for ev in matching_events:
+            d = ev["norm_dist"]
+            if d not in dist_groups:
+                dist_groups[d] = ev
+            else:
+                fee_curr = dist_groups[d]["fee"]
+                fee_new = ev["fee"]
+                if fee_new and fee_curr:
+                    try:
+                        val_curr = float(fee_curr.replace("$", "").replace(",", ""))
+                        val_new = float(fee_new.replace("$", "").replace(",", ""))
+                        if val_new < val_curr:
+                            dist_groups[d] = ev
+                    except ValueError:
+                        pass
+                        
+        sorted_dists = [d for d in distance_order if d in dist_groups]
+        if not sorted_dists:
+            continue
+            
+        dist_strs = []
+        price_strs = []
+        status_strs = []
+        for d in sorted_dists:
+            ev = dist_groups[d]
+            dist_strs.append(d)
+            price_strs.append(ev["fee"] if ev["fee"] else "TBD")
+            status_strs.append(ev["status"])
+            
+        dist_col = ", ".join(dist_strs)
+        price_col = " / ".join(price_strs)
+        
+        status_col = "Open"
+        price_inc_statuses = [s for s in status_strs if "Price increases" in s]
+        if price_inc_statuses:
+            status_col = price_inc_statuses[0]
+        else:
+            if any(s == "Open" for s in status_strs):
+                status_col = "Open"
+            elif any("TBD" in s for s in status_strs):
+                status_col = [s for s in status_strs if "TBD" in s][0]
+            else:
+                status_col = status_strs[0]
+                
+        addr = race.get('address', {})
+        city = addr.get('city')
+        state = addr.get('state')
+        if not city or not state:
+            continue
+            
+        city_state = f"{city}, {state}"
+        coords = geocode_city_state(city, state)
+        if coords:
+            dist_miles = haversine_distance(center_lat, center_lon, coords[0], coords[1])
+            proximity_col = f"{dist_miles:.1f} mi"
+        else:
+            proximity_col = "TBD"
+            dist_miles = 9999.0
+            
+        events_to_check = [dist_groups[d] for d in sorted_dists]
+        
+        processed_races.append({
+            "date": date_col,
+            "name": race.get('name'),
+            "location": city_state,
+            "distances": dist_col,
+            "price": price_col,
+            "proximity": proximity_col,
+            "dist_miles": dist_miles,
+            "status": status_col,
+            "link": race.get('url'),
+            "id": race.get('race_id'),
+            "events_to_check": events_to_check
+        })
+        
+    dedup_races = {}
+    for r in processed_races:
+        race_id = r["id"]
+        if race_id not in dedup_races:
+            dedup_races[race_id] = r
+    processed_races = list(dedup_races.values())
+    processed_races.sort(key=lambda x: (x["date"], x["dist_miles"]))
+    
+    if not processed_races:
+        click.secho("No valid races found after filtering. Obsidian page was not updated.", fg="yellow")
+        return
+        
+    click.echo("Fetching capacity and registration data for upcoming races...")
+    for idx, r in enumerate(processed_races):
+        click.echo(f"[{idx+1}/{len(processed_races)}] Checking {r['name']}...")
+        cap_map = get_race_capacities(r["id"], r["events_to_check"])
+        cap_strs = []
+        for ev in r["events_to_check"]:
+            ev_id = ev["event_id"]
+            cap_strs.append(cap_map.get(ev_id, "TBD"))
+        r["capacity"] = " / ".join(cap_strs)
+        
+    lines = [
+        "| Date | Race Name | Location | Distance(s) | Price | Proximity | Capacity | Status | Link |",
+        "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
+    ]
+    for r in processed_races:
+        name_bold = f"**{r['name']}**"
+        link_str = f"[Link]({r['link']})"
+        lines.append(
+            f"| {r['date']} | {name_bold} | {r['location']} | {r['distances']} | {r['price']} | {r['proximity']} | {r['capacity']} | {r['status']} | {link_str} |"
+        )
+    table_content = "\n".join(lines)
+    
+    scanned_months = []
+    curr = today
+    for _ in range(months + 1):
+        month_name = curr.strftime("%B")
+        if month_name not in scanned_months:
+            scanned_months.append(month_name)
+        if curr.month == 12:
+            curr = date(curr.year + 1, 1, 1)
+        else:
+            curr = date(curr.year, curr.month + 1, 1)
+            
+    new_frontmatter = {
+        "last_updated": current_dt.strftime("%Y-%m-%d %H:%M"),
+        "scanned_locations": [location_name],
+        "scanned_months": scanned_months
+    }
+    
+    from running_cli.storage.obsidian import safe_update_markdown
+    updated_file_content = safe_update_markdown(
+        file_content=file_content,
+        new_frontmatter=new_frontmatter,
+        new_summary=table_content,
+        start_tag="%% START_FUTURE_RACES %%",
+        end_tag="%% END_FUTURE_RACES %%",
+        missing_tags_template="\n# 🏃‍♂️ Future Races\n\n{replacement}\n\n{body}"
+    )
+    
+    with open(future_races_path, 'w') as f:
+        f.write(updated_file_content)
+        
+    click.secho(f"Successfully synced {len(processed_races)} races and updated {future_races_path}", fg="green", bold=True)
+
+
 if __name__ == "__main__":
     cli()
+
 
 

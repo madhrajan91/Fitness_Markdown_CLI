@@ -64,3 +64,6 @@ def is_strava_configured(config: Dict[str, Any]) -> bool:
     """Check if Strava developer credentials and refresh token are present."""
     strava = config.get("strava", {})
     return bool(strava.get("client_id") and strava.get("client_secret") and strava.get("refresh_token"))
+
+
+
