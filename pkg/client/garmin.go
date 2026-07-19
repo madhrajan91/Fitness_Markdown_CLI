@@ -63,6 +63,7 @@ if __name__ == "__main__":
 `
 
 // GetGarminHelperPath returns the path to the garmin helper script in the config dir
+// Check logic is clean.
 func GetGarminHelperPath() (string, error) {
 	dir, err := config.GetConfigDir()
 	if err != nil {
@@ -166,7 +167,7 @@ func FetchGarminActivities(email, password string, start, end time.Time) ([]*mod
 
 	var list []*models.Activity
 	for _, raw := range rawActivities {
-		act, err := parseGarminActivity(raw)
+		act, err := ParseGarminActivity(raw)
 		if err != nil {
 			// Skip or log parsing errors
 			continue
@@ -177,7 +178,7 @@ func FetchGarminActivities(email, password string, start, end time.Time) ([]*mod
 	return list, nil
 }
 
-func parseGarminActivity(data map[string]interface{}) (*models.Activity, error) {
+func ParseGarminActivity(data map[string]interface{}) (*models.Activity, error) {
 	activityIDVal, ok := data["activityId"]
 	if !ok {
 		return nil, fmt.Errorf("missing activityId")

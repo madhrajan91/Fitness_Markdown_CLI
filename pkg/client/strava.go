@@ -188,7 +188,7 @@ func FetchStravaActivities(clientID, clientSecret, refreshToken string, start, e
 
 	var list []*models.Activity
 	for _, raw := range allActivities {
-		act, err := parseStravaActivity(raw)
+		act, err := ParseStravaActivity(raw)
 		if err != nil {
 			continue
 		}
@@ -198,7 +198,7 @@ func FetchStravaActivities(clientID, clientSecret, refreshToken string, start, e
 	return list, nil
 }
 
-func parseStravaActivity(data map[string]interface{}) (*models.Activity, error) {
+func ParseStravaActivity(data map[string]interface{}) (*models.Activity, error) {
 	idVal, ok := data["id"]
 	if !ok {
 		return nil, fmt.Errorf("missing activity id")
