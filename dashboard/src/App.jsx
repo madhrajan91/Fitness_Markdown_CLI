@@ -72,17 +72,25 @@ function App() {
 
   // Group activities by week for Recharts chart (showing last 12 weeks of data)
   const getWeeklyVolumeData = () => {
+    const toLocalYYYYMMDD = (d) => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
     const weeklyMap = {};
     
     // Initialize last 12 weeks with 0 volume
     for (let i = 11; i >= 0; i--) {
       const d = new Date();
+      d.setHours(0, 0, 0, 0);
       d.setDate(d.getDate() - (i * 7));
       // Get Monday of that week
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(d.setDate(diff));
-      const key = monday.toISOString().split('T')[0];
+      const key = toLocalYYYYMMDD(monday);
       
       weeklyMap[key] = {
         week: monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -97,11 +105,26 @@ function App() {
     const acts = activities || [];
     acts.forEach(a => {
       if (!a || !a.date) return;
-      const actDate = new Date(a.date);
+      
+      // Parse "YYYY-MM-DD HH:MM" robustly in browser's local timezone
+      const parts = a.date.split(' ');
+      if (parts.length < 2) return;
+      const dateParts = parts[0].split('-');
+      const timeParts = parts[1].split(':');
+      if (dateParts.length < 3 || timeParts.length < 2) return;
+      
+      const actDate = new Date(
+        parseInt(dateParts[0], 10),
+        parseInt(dateParts[1], 10) - 1,
+        parseInt(dateParts[2], 10),
+        parseInt(timeParts[0], 10),
+        parseInt(timeParts[1], 10)
+      );
+
       const day = actDate.getDay();
       const diff = actDate.getDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(actDate.setDate(diff));
-      const key = monday.toISOString().split('T')[0];
+      const key = toLocalYYYYMMDD(monday);
 
       if (weeklyMap[key]) {
         // Convert distance to preferred unit
