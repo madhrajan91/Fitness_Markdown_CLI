@@ -643,14 +643,14 @@ function App() {
                     {/* Planned Workouts List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto', paddingRight: '4px' }}>
                       {(plans[0].workouts || []).map(w => {
-                        const statusColor = w.Status === 'Completed' ? '#00f5d4' :
-                                          w.Status === 'Missed' ? '#ff3366' : '#9ca3af';
+                        const statusClass = w.Status === 'Completed' ? 'badge-completed' :
+                                            w.Status === 'Missed' ? 'badge-missed' : 'badge-pending';
                         
                         return (
                           <div 
                             key={w.id} 
                             style={{ 
-                              background: 'rgba(255,255,255,0.02)', 
+                              background: 'rgba(128,128,128,0.02)', 
                               border: '1px solid var(--card-border)', 
                               borderRadius: '8px', 
                               padding: '12px',
@@ -675,13 +675,11 @@ function App() {
                             </div>
 
                             <span 
+                              className={`badge ${statusClass}`}
                               style={{ 
                                 fontSize: '11px', 
                                 fontWeight: '600', 
                                 textTransform: 'uppercase', 
-                                color: statusColor, 
-                                border: `1px solid ${statusColor}40`,
-                                background: `${statusColor}15`,
                                 padding: '3px 8px',
                                 borderRadius: '4px'
                               }}
