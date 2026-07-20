@@ -262,10 +262,17 @@ func ParseGarminActivity(data map[string]interface{}) (*models.Activity, error) 
 		longitude = &val
 	}
 
+	if sport == "Run" && elevationGain >= 365.76 {
+		sport = "Trail Run"
+	}
+
 	isRace := false
 	if eventType, ok := data["eventType"].(map[string]interface{}); ok {
 		typeKey, _ := eventType["typeKey"].(string)
 		isRace = strings.ToLower(typeKey) == "race"
+	}
+	if strings.Contains(strings.ToLower(title), "race") {
+		isRace = true
 	}
 
 	rawJSON, _ := json.Marshal(data)

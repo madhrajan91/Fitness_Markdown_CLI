@@ -300,10 +300,17 @@ func ParseStravaActivity(data map[string]interface{}) (*models.Activity, error) 
 		}
 	}
 
-	// Parse workout type for race status (workout_type = 1 is race)
+	if sport == "Run" && elevationGain >= 365.76 {
+		sport = "Trail Run"
+	}
+
+	// Parse workout type for race status (workout_type = 1 or 11 is race)
 	isRace := false
 	if wt, ok := data["workout_type"].(float64); ok {
-		isRace = int(wt) == 1
+		isRace = int(wt) == 1 || int(wt) == 11
+	}
+	if strings.Contains(strings.ToLower(title), "race") {
+		isRace = true
 	}
 
 	rawJSON, _ := json.Marshal(data)

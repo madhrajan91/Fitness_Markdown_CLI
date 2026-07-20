@@ -159,3 +159,9 @@ tr:hover td {
   color: var(--accent-walk);
   border: 1px solid rgba(255, 183, 3, 0.2);
 }
+
+.badge-trail-run {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}

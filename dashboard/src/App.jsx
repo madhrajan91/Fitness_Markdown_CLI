@@ -342,7 +342,7 @@ function App() {
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <span style={{ fontWeight: '500' }}>{a.title}</span>
-                          <span className={`badge badge-${(a.sport || 'other').toLowerCase()}`} style={{ width: 'fit-content' }}>
+                          <span className={`badge badge-${(a.sport || 'other').toLowerCase().replace(/\s+/g, '-')}`} style={{ width: 'fit-content' }}>
                             {a.sport}
                           </span>
                         </div>

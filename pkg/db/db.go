@@ -548,7 +548,7 @@ func (db *DB) GetMergedRaces(startDate *time.Time) ([]*models.MergedActivity, er
 	return list, nil
 }
 
-// GetMergedTrailRuns gets all trail runs (Sport=Run, Elevation>=609.6 meters, from Strava)
+// GetMergedTrailRuns gets all trail runs (Sport=Trail Run or Sport=Run with Elevation>=365.76 meters/1200 ft)
 func (db *DB) GetMergedTrailRuns(startDate *time.Time) ([]*models.MergedActivity, error) {
 	var query string
 	var rows *sql.Rows
@@ -559,7 +559,7 @@ func (db *DB) GetMergedTrailRuns(startDate *time.Time) ([]*models.MergedActivity
 			avg_hr, max_hr, elevation_gain_meters, garmin_id, strava_id,
 			description, location_name, latitude, longitude, is_race, sources
 			FROM merged_activities
-			WHERE sport = 'Run' AND elevation_gain_meters >= 609.6 AND sources LIKE '%strava%' AND date >= ?
+			WHERE (sport = 'Trail Run' OR (sport = 'Run' AND elevation_gain_meters >= 365.76)) AND date >= ?
 			ORDER BY date ASC`
 		rows, err = db.conn.Query(query, startDate.Format("2006-01-02"))
 	} else {
@@ -567,7 +567,7 @@ func (db *DB) GetMergedTrailRuns(startDate *time.Time) ([]*models.MergedActivity
 			avg_hr, max_hr, elevation_gain_meters, garmin_id, strava_id,
 			description, location_name, latitude, longitude, is_race, sources
 			FROM merged_activities
-			WHERE sport = 'Run' AND elevation_gain_meters >= 609.6 AND sources LIKE '%strava%'
+			WHERE sport = 'Trail Run' OR (sport = 'Run' AND elevation_gain_meters >= 365.76)
 			ORDER BY date ASC`
 		rows, err = db.conn.Query(query)
 	}

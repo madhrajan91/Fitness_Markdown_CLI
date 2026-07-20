@@ -17,12 +17,13 @@ import (
 )
 
 var SportEmojis = map[string]string{
-	"Run":   "🏃",
-	"Ride":  "🚴",
-	"Swim":  "🏊",
-	"Walk":  "🚶",
-	"Hike":  "🥾",
-	"Other": "🏋️",
+	"Run":       "🏃",
+	"Trail Run": "🌲",
+	"Ride":      "🚴",
+	"Swim":      "🏊",
+	"Walk":      "🚶",
+	"Hike":      "🥾",
+	"Other":     "🏋️",
 }
 
 // GetMondayOfWeek returns the date of Monday in the same week
@@ -369,7 +370,7 @@ func WriteWeeklyNote(vaultPath, folder string, mondayDate time.Time, activities 
 		// Format race or trail links
 		cleanedTitle := CleanFilename(a.Title)
 		dateISO := a.StartTime.Format("2006-01-02")
-		isTrail := a.Sport == "Run" && a.ElevationGainMeters >= 609.6 && hasSource(a.Sources, "strava")
+		isTrail := a.Sport == "Trail Run" || (a.Sport == "Run" && a.ElevationGainMeters >= 365.76)
 
 		titleStr := a.Title
 		if a.IsRace && isTrail {
@@ -498,7 +499,7 @@ func WriteRaceNotes(vaultPath, folder string, activities []*models.MergedActivit
 		srcStr := strings.Join(srcLinks, ", ")
 
 		mondayISO := GetMondayOfWeek(a.StartTime).Format("2006-01-02")
-		isTrail := a.Sport == "Run" && a.ElevationGainMeters >= 609.6 && hasSource(a.Sources, "strava")
+		isTrail := a.Sport == "Trail Run" || (a.Sport == "Run" && a.ElevationGainMeters >= 365.76)
 
 		summaryLines := []string{
 			"### Race Stats",
@@ -601,7 +602,7 @@ func WriteRaceNotes(vaultPath, folder string, activities []*models.MergedActivit
 			raceFileLinkName := fmt.Sprintf("%s - %s", a.StartTime.Format("2006-01-02"), CleanFilename(a.Title))
 			raceLink := fmt.Sprintf("[[%s|%s]]", raceFileLinkName, a.Title)
 
-			isTrail := a.Sport == "Run" && a.ElevationGainMeters >= 609.6 && hasSource(a.Sources, "strava")
+			isTrail := a.Sport == "Trail Run" || (a.Sport == "Run" && a.ElevationGainMeters >= 365.76)
 			if isTrail {
 				raceLink += fmt.Sprintf(" (also [[../TrailRuns/%s|Trail Run]])", raceFileLinkName)
 			}
@@ -637,7 +638,7 @@ func WriteRaceNotes(vaultPath, folder string, activities []*models.MergedActivit
 func WriteTrailRunNotes(vaultPath, folder string, activities []*models.MergedActivity, unit string) ([]string, error) {
 	var trailRuns []*models.MergedActivity
 	for _, a := range activities {
-		if a.Sport == "Run" && a.ElevationGainMeters >= 609.6 && hasSource(a.Sources, "strava") {
+		if a.Sport == "Trail Run" || (a.Sport == "Run" && a.ElevationGainMeters >= 365.76) {
 			trailRuns = append(trailRuns, a)
 		}
 	}
