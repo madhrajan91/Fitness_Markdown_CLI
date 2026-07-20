@@ -381,6 +381,10 @@ func WriteWeeklyNote(vaultPath, folder string, mondayDate time.Time, activities 
 			titleStr = fmt.Sprintf("[[TrailRuns/%s - %s|%s]]", dateISO, cleanedTitle, a.Title)
 		}
 
+		if a.Links != "" {
+			titleStr += fmt.Sprintf(" ([Link](%s))", a.Links)
+		}
+
 		rowFields := []string{dateStr, sportStr, titleStr, distStr, timeStr, paceStr, hrStr, elevStr, locStr, srcStr}
 		tableRows = append(tableRows, "| "+strings.Join(rowFields, " | ")+" |")
 
@@ -512,6 +516,10 @@ func WriteRaceNotes(vaultPath, folder string, activities []*models.MergedActivit
 			fmt.Sprintf("- **Location**: %s", locStr),
 			fmt.Sprintf("- **Source**: %s", srcStr),
 			fmt.Sprintf("- **Weekly Log**: [[../Week of %s|Week of %s]]", mondayISO, mondayISO),
+		}
+
+		if a.Links != "" {
+			summaryLines = append(summaryLines, fmt.Sprintf("- **External Link**: [%s](%s)", a.Links, a.Links))
 		}
 
 		if isTrail {
@@ -708,6 +716,10 @@ func WriteTrailRunNotes(vaultPath, folder string, activities []*models.MergedAct
 			fmt.Sprintf("- **Location**: %s", locStr),
 			fmt.Sprintf("- **Source**: %s", srcStr),
 			fmt.Sprintf("- **Weekly Log**: [[../Week of %s|Week of %s]]", mondayISO, mondayISO),
+		}
+
+		if a.Links != "" {
+			summaryLines = append(summaryLines, fmt.Sprintf("- **External Link**: [%s](%s)", a.Links, a.Links))
 		}
 
 		if isRace {

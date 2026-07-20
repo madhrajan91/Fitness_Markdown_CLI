@@ -159,6 +159,7 @@ func runServer(cmd *cobra.Command, args []string) {
 				Location        string   `json:"location"`
 				Description     string   `json:"description"`
 				IsRace          bool     `json:"is_race"`
+				Links           string   `json:"links"`
 			}
 
 			var req manualActivityRequest
@@ -226,6 +227,7 @@ func runServer(cmd *cobra.Command, args []string) {
 				Description:         req.Description,
 				LocationName:        req.Location,
 				IsRace:              isRace,
+				Links:               req.Links,
 				RawData:             "{}",
 			}
 
@@ -288,23 +290,24 @@ func runServer(cmd *cobra.Command, args []string) {
 		}
 
 		type viewActivity struct {
-			ID                  int64    `json:"id"`
-			Date                string   `json:"date"`
-			Sport               string   `json:"sport"`
-			Title               string   `json:"title"`
-			DistanceMeters      float64  `json:"distance_meters"`
-			DistanceDisplay     string   `json:"distance_display"`
-			DurationSeconds     float64  `json:"duration_seconds"`
-			DurationDisplay     string   `json:"duration_display"`
-			PaceDisplay         string   `json:"pace_display"`
-			ElevationGainMeters float64  `json:"elevation_gain_meters"`
-			ElevationDisplay    string   `json:"elevation_display"`
-			LocationName        string   `json:"location_name"`
-			AvgHR               *float64 `json:"avg_hr"`
-			MaxHR               *float64 `json:"max_hr"`
-			Sources             []string `json:"sources"`
-			IsRace              bool     `json:"is_race"`
-		}
+				ID                  int64    `json:"id"`
+				Date                string   `json:"date"`
+				Sport               string   `json:"sport"`
+				Title               string   `json:"title"`
+				DistanceMeters      float64  `json:"distance_meters"`
+				DistanceDisplay     string   `json:"distance_display"`
+				DurationSeconds     float64  `json:"duration_seconds"`
+				DurationDisplay     string   `json:"duration_display"`
+				PaceDisplay         string   `json:"pace_display"`
+				ElevationGainMeters float64  `json:"elevation_gain_meters"`
+				ElevationDisplay    string   `json:"elevation_display"`
+				LocationName        string   `json:"location_name"`
+				AvgHR               *float64 `json:"avg_hr"`
+				MaxHR               *float64 `json:"max_hr"`
+				Sources             []string `json:"sources"`
+				IsRace              bool     `json:"is_race"`
+				Links               string   `json:"links,omitempty"`
+			}
 
 		list := make([]viewActivity, 0)
 		for i := len(activities) - 1; i >= 0; i-- {
@@ -326,6 +329,7 @@ func runServer(cmd *cobra.Command, args []string) {
 				MaxHR:               a.MaxHR,
 				Sources:             a.Sources,
 				IsRace:              a.IsRace,
+				Links:               a.Links,
 			})
 		}
 

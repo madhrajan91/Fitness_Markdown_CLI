@@ -99,6 +99,11 @@ func MergeActivities(garmin []*models.Activity, strava []*models.Activity) []*mo
 				maxHR = matchedStrava.MaxHR
 			}
 
+			links := g.Links
+			if links == "" {
+				links = matchedStrava.Links
+			}
+
 			merged = append(merged, &models.MergedActivity{
 				Date:                time.Date(g.StartTime.Year(), g.StartTime.Month(), g.StartTime.Day(), 0, 0, 0, 0, time.Local),
 				StartTime:           g.StartTime,
@@ -116,6 +121,7 @@ func MergeActivities(garmin []*models.Activity, strava []*models.Activity) []*mo
 				Latitude:            latitude,
 				Longitude:           longitude,
 				IsRace:              g.IsRace || matchedStrava.IsRace,
+				Links:               links,
 				Sources:             []string{"garmin", "strava"},
 			})
 		} else {
@@ -136,12 +142,13 @@ func MergeActivities(garmin []*models.Activity, strava []*models.Activity) []*mo
 				Latitude:            g.Latitude,
 				Longitude:           g.Longitude,
 				IsRace:              g.IsRace,
+				Links:               g.Links,
 				Sources:             []string{"garmin"},
 			})
 		}
 	}
 
-	// Add remaining Strava-only activities
+	// Add remaining Strava-only activities (including local manual activities)
 	for _, s := range strava {
 		if matchedStravaIDs[s.ID] {
 			continue
@@ -163,7 +170,8 @@ func MergeActivities(garmin []*models.Activity, strava []*models.Activity) []*mo
 			Latitude:            s.Latitude,
 			Longitude:           s.Longitude,
 			IsRace:              s.IsRace,
-			Sources:             []string{"strava"},
+			Links:               s.Links,
+			Sources:             []string{s.Provider},
 		})
 	}
 

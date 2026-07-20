@@ -63,6 +63,7 @@ function App() {
   const [formLocation, setFormLocation] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formIsRace, setFormIsRace] = useState(false);
+  const [formLinks, setFormLinks] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formSuccess, setFormSuccess] = useState(false);
   const [formError, setFormError] = useState('');
@@ -120,7 +121,8 @@ function App() {
       elevation: parseFloat(formElevation || '0'),
       location: formLocation,
       description: formDescription,
-      is_race: formIsRace
+      is_race: formIsRace,
+      links: formLinks
     };
 
     try {
@@ -146,6 +148,7 @@ function App() {
       setFormLocation('');
       setFormDescription('');
       setFormIsRace(false);
+      setFormLinks('');
 
       // Refresh and switch view after a short delay
       setTimeout(() => {
@@ -518,6 +521,11 @@ function App() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{ fontWeight: '500' }}>{a.title}</span>
+                                {a.links && (
+                                  <a href={a.links} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-swim)', display: 'inline-flex', alignItems: 'center' }} title="Activity Link">
+                                    <ExternalLink size={14} />
+                                  </a>
+                                )}
                                 {a.is_race && (
                                   <span style={{ fontSize: '11px', background: 'rgba(255, 183, 3, 0.15)', color: '#ffb703', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(255, 183, 3, 0.3)', fontWeight: '600', textTransform: 'uppercase' }}>Race</span>
                                 )}
@@ -863,7 +871,14 @@ function App() {
                         <td style={{ whiteSpace: 'nowrap' }}>{a.date}</td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontWeight: '600', color: '#fff' }}>🏆 {a.title}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: '600', color: '#fff' }}>🏆 {a.title}</span>
+                              {a.links && (
+                                <a href={a.links} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-swim)', display: 'inline-flex', alignItems: 'center' }} title="Activity Link">
+                                  <ExternalLink size={14} />
+                                </a>
+                              )}
+                            </div>
                             <span className={`badge badge-${(a.sport || 'other').toLowerCase().replace(/\s+/g, '-')}`} style={{ width: 'fit-content' }}>
                               {a.sport}
                             </span>
@@ -891,10 +906,17 @@ function App() {
                         <td style={{ whiteSpace: 'nowrap' }}>{a.date}</td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontWeight: '600', color: '#fff' }}>🌲 {a.title}</span>
-                            {a.is_race && (
-                              <span style={{ fontSize: '11px', background: 'rgba(255, 183, 3, 0.15)', color: '#ffb703', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(255, 183, 3, 0.3)', width: 'fit-content', fontWeight: '600' }}>Race</span>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: '600', color: '#fff' }}>🌲 {a.title}</span>
+                              {a.links && (
+                                <a href={a.links} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-swim)', display: 'inline-flex', alignItems: 'center' }} title="Activity Link">
+                                  <ExternalLink size={14} />
+                                </a>
+                              )}
+                              {a.is_race && (
+                                <span style={{ fontSize: '11px', background: 'rgba(255, 183, 3, 0.15)', color: '#ffb703', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(255, 183, 3, 0.3)', width: 'fit-content', fontWeight: '600' }}>Race</span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td>{a.distance_display}</td>
@@ -1254,6 +1276,27 @@ function App() {
                     outline: 'none',
                     fontFamily: 'inherit',
                     resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '8px' }}>External Links / URL</label>
+                <input 
+                  type="url" 
+                  placeholder="https://e.g. race-results-page.com/your-bib-number"
+                  value={formLinks}
+                  onChange={(e) => setFormLinks(e.target.value)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--card-border)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    color: '#fff',
+                    fontSize: '15px',
+                    outline: 'none'
                   }}
                 />
               </div>

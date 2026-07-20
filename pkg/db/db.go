@@ -69,6 +69,7 @@ func (db *DB) migrate() error {
 			latitude REAL,
 			longitude REAL,
 			is_race INTEGER NOT NULL,
+			links TEXT,
 			raw_data TEXT,
 			PRIMARY KEY (id, provider)
 		);`,
@@ -90,6 +91,7 @@ func (db *DB) migrate() error {
 			latitude REAL,
 			longitude REAL,
 			is_race INTEGER NOT NULL,
+			links TEXT,
 			sources TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS training_plans (
@@ -131,6 +133,11 @@ func (db *DB) migrate() error {
 			return fmt.Errorf("migration failed: %w", err)
 		}
 	}
+
+	// Run alter tables as incremental updates
+	_, _ = db.conn.Exec("ALTER TABLE activities ADD COLUMN links TEXT")
+	_, _ = db.conn.Exec("ALTER TABLE merged_activities ADD COLUMN links TEXT")
+
 	return nil
 }
 
@@ -159,8 +166,8 @@ func (db *DB) InsertOrUpdateActivity(a *models.Activity) error {
 	query := `INSERT OR REPLACE INTO activities (
 		id, provider, sport, title, start_time, distance_meters, duration_seconds,
 		avg_hr, max_hr, elevation_gain_meters, description, location_name,
-		latitude, longitude, is_race, raw_data
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		latitude, longitude, is_race, links, raw_data
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	startTimeStr := a.StartTime.Format(time.RFC3339)
 	isRaceVal := 0
@@ -171,7 +178,7 @@ func (db *DB) InsertOrUpdateActivity(a *models.Activity) error {
 	_, err := db.conn.Exec(query,
 		a.ID, a.Provider, a.Sport, a.Title, startTimeStr, a.DistanceMeters, a.DurationSeconds,
 		a.AvgHR, a.MaxHR, a.ElevationGainMeters, a.Description, a.LocationName,
-		a.Latitude, a.Longitude, isRaceVal, a.RawData,
+		a.Latitude, a.Longitude, isRaceVal, a.Links, a.RawData,
 	)
 	return err
 }
@@ -180,7 +187,7 @@ func (db *DB) InsertOrUpdateActivity(a *models.Activity) error {
 func (db *DB) GetActivitiesForRange(provider string, start, end time.Time) ([]*models.Activity, error) {
 	query := `SELECT id, provider, sport, title, start_time, distance_meters, duration_seconds,
 		avg_hr, max_hr, elevation_gain_meters, description, location_name,
-		latitude, longitude, is_race, raw_data
+		latitude, longitude, is_race, links, raw_data
 		FROM activities
 		WHERE provider = ? AND start_time >= ? AND start_time <= ?
 		ORDER BY start_time ASC`
@@ -200,7 +207,7 @@ func (db *DB) GetActivitiesForRange(provider string, start, end time.Time) ([]*m
 		err := rows.Scan(
 			&a.ID, &a.Provider, &a.Sport, &a.Title, &startTimeStr, &a.DistanceMeters, &a.DurationSeconds,
 			&a.AvgHR, &a.MaxHR, &a.ElevationGainMeters, &a.Description, &a.LocationName,
-			&a.Latitude, &a.Longitude, &isRaceInt, &a.RawData,
+			&a.Latitude, &a.Longitude, &isRaceInt, &a.Links, &a.RawData,
 		)
 		if err != nil {
 			return nil, err
@@ -232,8 +239,8 @@ func (db *DB) SaveMergedActivity(ma *models.MergedActivity) (int64, error) {
 	query := `INSERT INTO merged_activities (
 		date, start_time, sport, title, distance_meters, duration_seconds,
 		avg_hr, max_hr, elevation_gain_meters, garmin_id, strava_id,
-		description, location_name, latitude, longitude, is_race, sources
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		description, location_name, latitude, longitude, is_race, links, sources
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	sourcesStr := strings.Join(ma.Sources, ",")
 	isRaceVal := 0
@@ -258,6 +265,7 @@ func (db *DB) SaveMergedActivity(ma *models.MergedActivity) (int64, error) {
 		ma.Latitude,
 		ma.Longitude,
 		isRaceVal,
+		ma.Links,
 		sourcesStr,
 	)
 	if err != nil {
@@ -271,7 +279,7 @@ func (db *DB) SaveMergedActivity(ma *models.MergedActivity) (int64, error) {
 func (db *DB) GetMergedActivitiesForRange(start, end time.Time) ([]*models.MergedActivity, error) {
 	query := `SELECT id, date, start_time, sport, title, distance_meters, duration_seconds,
 		avg_hr, max_hr, elevation_gain_meters, garmin_id, strava_id,
-		description, location_name, latitude, longitude, is_race, sources
+		description, location_name, latitude, longitude, is_race, links, sources
 		FROM merged_activities
 		WHERE date >= ? AND date <= ?
 		ORDER BY date ASC, start_time ASC`
@@ -291,7 +299,7 @@ func (db *DB) GetMergedActivitiesForRange(start, end time.Time) ([]*models.Merge
 		err := rows.Scan(
 			&ma.ID, &dateStr, &startTimeStr, &ma.Sport, &ma.Title, &ma.DistanceMeters, &ma.DurationSeconds,
 			&ma.AvgHR, &ma.MaxHR, &ma.ElevationGainMeters, &ma.GarminID, &ma.StravaID,
-			&ma.Description, &ma.LocationName, &ma.Latitude, &ma.Longitude, &isRaceInt, &sourcesStr,
+			&ma.Description, &ma.LocationName, &ma.Latitude, &ma.Longitude, &isRaceInt, &ma.Links, &sourcesStr,
 		)
 		if err != nil {
 			return nil, err
@@ -503,7 +511,7 @@ func (db *DB) GetMergedRaces(startDate *time.Time) ([]*models.MergedActivity, er
 	if startDate != nil {
 		query = `SELECT id, date, start_time, sport, title, distance_meters, duration_seconds,
 			avg_hr, max_hr, elevation_gain_meters, garmin_id, strava_id,
-			description, location_name, latitude, longitude, is_race, sources
+			description, location_name, latitude, longitude, is_race, links, sources
 			FROM merged_activities
 			WHERE is_race = 1 AND date >= ?
 			ORDER BY date ASC`
@@ -511,7 +519,7 @@ func (db *DB) GetMergedRaces(startDate *time.Time) ([]*models.MergedActivity, er
 	} else {
 		query = `SELECT id, date, start_time, sport, title, distance_meters, duration_seconds,
 			avg_hr, max_hr, elevation_gain_meters, garmin_id, strava_id,
-			description, location_name, latitude, longitude, is_race, sources
+			description, location_name, latitude, longitude, is_race, links, sources
 			FROM merged_activities
 			WHERE is_race = 1
 			ORDER BY date ASC`
@@ -532,7 +540,7 @@ func (db *DB) GetMergedRaces(startDate *time.Time) ([]*models.MergedActivity, er
 		err := rows.Scan(
 			&ma.ID, &dateStr, &startTimeStr, &ma.Sport, &ma.Title, &ma.DistanceMeters, &ma.DurationSeconds,
 			&ma.AvgHR, &ma.MaxHR, &ma.ElevationGainMeters, &ma.GarminID, &ma.StravaID,
-			&ma.Description, &ma.LocationName, &ma.Latitude, &ma.Longitude, &isRaceInt, &sourcesStr,
+			&ma.Description, &ma.LocationName, &ma.Latitude, &ma.Longitude, &isRaceInt, &ma.Links, &sourcesStr,
 		)
 		if err != nil {
 			return nil, err
@@ -557,7 +565,7 @@ func (db *DB) GetMergedTrailRuns(startDate *time.Time) ([]*models.MergedActivity
 	if startDate != nil {
 		query = `SELECT id, date, start_time, sport, title, distance_meters, duration_seconds,
 			avg_hr, max_hr, elevation_gain_meters, garmin_id, strava_id,
-			description, location_name, latitude, longitude, is_race, sources
+			description, location_name, latitude, longitude, is_race, links, sources
 			FROM merged_activities
 			WHERE (sport = 'Trail Run' OR (sport = 'Run' AND elevation_gain_meters >= 365.76)) AND date >= ?
 			ORDER BY date ASC`
@@ -565,7 +573,7 @@ func (db *DB) GetMergedTrailRuns(startDate *time.Time) ([]*models.MergedActivity
 	} else {
 		query = `SELECT id, date, start_time, sport, title, distance_meters, duration_seconds,
 			avg_hr, max_hr, elevation_gain_meters, garmin_id, strava_id,
-			description, location_name, latitude, longitude, is_race, sources
+			description, location_name, latitude, longitude, is_race, links, sources
 			FROM merged_activities
 			WHERE sport = 'Trail Run' OR (sport = 'Run' AND elevation_gain_meters >= 365.76)
 			ORDER BY date ASC`
@@ -586,7 +594,7 @@ func (db *DB) GetMergedTrailRuns(startDate *time.Time) ([]*models.MergedActivity
 		err := rows.Scan(
 			&ma.ID, &dateStr, &startTimeStr, &ma.Sport, &ma.Title, &ma.DistanceMeters, &ma.DurationSeconds,
 			&ma.AvgHR, &ma.MaxHR, &ma.ElevationGainMeters, &ma.GarminID, &ma.StravaID,
-			&ma.Description, &ma.LocationName, &ma.Latitude, &ma.Longitude, &isRaceInt, &sourcesStr,
+			&ma.Description, &ma.LocationName, &ma.Latitude, &ma.Longitude, &isRaceInt, &ma.Links, &sourcesStr,
 		)
 		if err != nil {
 			return nil, err

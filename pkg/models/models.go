@@ -21,6 +21,7 @@ type Activity struct {
 	Latitude             *float64  `json:"latitude,omitempty"`
 	Longitude            *float64  `json:"longitude,omitempty"`
 	IsRace               bool      `json:"is_race"`
+	Links                string    `json:"links,omitempty"`
 	RawData              string    `json:"raw_data,omitempty"` // Store raw JSON payload as text
 }
 
@@ -43,6 +44,7 @@ type MergedActivity struct {
 	Latitude             *float64  `json:"latitude,omitempty"`
 	Longitude            *float64  `json:"longitude,omitempty"`
 	IsRace               bool      `json:"is_race"`
+	Links                string    `json:"links,omitempty"`
 	Sources              []string  `json:"sources"` // "garmin", "strava"
 }
 
