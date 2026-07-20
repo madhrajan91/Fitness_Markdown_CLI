@@ -346,11 +346,7 @@ func runImportCache(cmd *cobra.Command, args []string) {
 				continue
 			}
 
-			// Skip if a Strava activity exists on this date
-			hasStrava, err := database.HasStravaActivityOnDate(act.StartTime, act.Sport)
-			if err == nil && hasStrava {
-				continue
-			}
+
 
 			if err := database.InsertOrUpdateActivity(act); err != nil {
 				fmt.Printf("    Error saving Garmin activity %d: %v\n", act.ID, err)
@@ -396,8 +392,6 @@ func runImportCache(cmd *cobra.Command, args []string) {
 			if err := database.InsertOrUpdateActivity(act); err != nil {
 				fmt.Printf("    Error saving Strava activity %d: %v\n", act.ID, err)
 			} else {
-				// Remove matching Garmin activities to avoid duplicates
-				database.DeleteMatchingGarminActivity(act.StartTime, act.Sport)
 				imported++
 				if imported%500 == 0 {
 					fmt.Printf("    Imported %d Strava activities...\n", imported)

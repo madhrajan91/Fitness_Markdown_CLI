@@ -574,25 +574,7 @@ function App() {
                           <td>{a.duration_display}</td>
                           <td>{a.pace_display}</td>
                           <td>{a.elevation_display}</td>
-                          <td style={{ color: 'var(--text-secondary)' }}>
-                            {a.location_name ? (
-                              a.latitude && a.longitude ? (
-                                <a href={`https://www.google.com/maps/search/?api=1&query=${a.latitude},${a.longitude}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-run)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  📍 {a.location_name}
-                                </a>
-                              ) : (
-                                <span>{a.location_name}</span>
-                              )
-                            ) : (
-                              a.latitude && a.longitude ? (
-                                <a href={`https://www.google.com/maps/search/?api=1&query=${a.latitude},${a.longitude}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-run)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  📍 Map
-                                </a>
-                              ) : (
-                                '-'
-                              )
-                            )}
-                          </td>
+                          <td style={{ color: 'var(--text-secondary)' }}>{a.location_name || '-'}</td>
                           <td>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               {(a.sources || []).map(src => (
@@ -939,25 +921,7 @@ function App() {
                         <td>{a.duration_display}</td>
                         <td>{a.pace_display}</td>
                         <td>{a.elevation_display}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>
-                          {a.location_name ? (
-                            a.latitude && a.longitude ? (
-                              <a href={`https://www.google.com/maps/search/?api=1&query=${a.latitude},${a.longitude}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-run)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  📍 {a.location_name}
-                              </a>
-                            ) : (
-                              <span>{a.location_name}</span>
-                            )
-                          ) : (
-                            a.latitude && a.longitude ? (
-                              <a href={`https://www.google.com/maps/search/?api=1&query=${a.latitude},${a.longitude}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-run)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  📍 Map
-                              </a>
-                            ) : (
-                              '-'
-                            )
-                          )}
-                        </td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{a.location_name || '-'}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             {(a.sources || []).map(src => (
@@ -992,25 +956,7 @@ function App() {
                         <td>{a.elevation_display}</td>
                         <td>{a.duration_display}</td>
                         <td>{a.pace_display}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>
-                          {a.location_name ? (
-                            a.latitude && a.longitude ? (
-                              <a href={`https://www.google.com/maps/search/?api=1&query=${a.latitude},${a.longitude}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-run)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  📍 {a.location_name}
-                              </a>
-                            ) : (
-                              <span>{a.location_name}</span>
-                            )
-                          ) : (
-                            a.latitude && a.longitude ? (
-                              <a href={`https://www.google.com/maps/search/?api=1&query=${a.latitude},${a.longitude}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-run)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  📍 Map
-                              </a>
-                            ) : (
-                              '-'
-                            )
-                          )}
-                        </td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{a.location_name || '-'}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             {(a.sources || []).map(src => (
