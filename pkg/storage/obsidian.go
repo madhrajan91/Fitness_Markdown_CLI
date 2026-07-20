@@ -353,6 +353,8 @@ func WriteWeeklyNote(vaultPath, folder string, mondayDate time.Time, activities 
 				locName = "Map"
 			}
 			locStr = fmt.Sprintf("📍 [%s](%s)", locName, mapURL)
+		} else if a.LocationName != "" {
+			locStr = a.LocationName
 		}
 
 		var srcLinks []string
@@ -488,6 +490,8 @@ func WriteRaceNotes(vaultPath, folder string, activities []*models.MergedActivit
 				locName = "Map"
 			}
 			locStr = fmt.Sprintf("📍 [%s](%s)", locName, mapURL)
+		} else if a.LocationName != "" {
+			locStr = a.LocationName
 		}
 
 		var srcLinks []string
@@ -689,6 +693,8 @@ func WriteTrailRunNotes(vaultPath, folder string, activities []*models.MergedAct
 				locName = "Map"
 			}
 			locStr = fmt.Sprintf("📍 [%s](%s)", locName, mapURL)
+		} else if a.LocationName != "" {
+			locStr = a.LocationName
 		}
 
 		var srcLinks []string

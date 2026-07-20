@@ -302,6 +302,8 @@ func runServer(cmd *cobra.Command, args []string) {
 				ElevationGainMeters float64  `json:"elevation_gain_meters"`
 				ElevationDisplay    string   `json:"elevation_display"`
 				LocationName        string   `json:"location_name"`
+				Latitude            *float64 `json:"latitude,omitempty"`
+				Longitude           *float64 `json:"longitude,omitempty"`
 				AvgHR               *float64 `json:"avg_hr"`
 				MaxHR               *float64 `json:"max_hr"`
 				Sources             []string `json:"sources"`
@@ -325,6 +327,8 @@ func runServer(cmd *cobra.Command, args []string) {
 				ElevationGainMeters: a.ElevationGainMeters,
 				ElevationDisplay:    storage.FormatElevation(a.ElevationGainMeters, cfg.DistanceUnit),
 				LocationName:        a.LocationName,
+				Latitude:            a.Latitude,
+				Longitude:           a.Longitude,
 				AvgHR:               a.AvgHR,
 				MaxHR:               a.MaxHR,
 				Sources:             a.Sources,
