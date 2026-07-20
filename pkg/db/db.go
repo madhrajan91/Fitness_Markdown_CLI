@@ -602,7 +602,7 @@ func (db *DB) GetMergedTrailRuns(startDate *time.Time) ([]*models.MergedActivity
 	return list, nil
 }
 
-// GetRawActivitiesForSync gets all raw activities in memory for merging
+// GetRawActivitiesForSync gets all raw activities in memory for merging (includes local manual activities grouped with Strava)
 func (db *DB) GetRawActivitiesForSync(start, end time.Time) ([]*models.Activity, []*models.Activity, error) {
 	garmin, err := db.GetActivitiesForRange("garmin", start, end)
 	if err != nil {
@@ -611,6 +611,10 @@ func (db *DB) GetRawActivitiesForSync(start, end time.Time) ([]*models.Activity,
 	strava, err := db.GetActivitiesForRange("strava", start, end)
 	if err != nil {
 		return nil, nil, err
+	}
+	local, err := db.GetActivitiesForRange("local", start, end)
+	if err == nil {
+		strava = append(strava, local...)
 	}
 	return garmin, strava, nil
 }

@@ -13,6 +13,7 @@ import (
 	"running_cli/pkg/client"
 	"running_cli/pkg/config"
 	"running_cli/pkg/db"
+	"running_cli/pkg/merger"
 	"running_cli/pkg/models"
 	"running_cli/pkg/storage"
 
@@ -143,6 +144,140 @@ func runServer(cmd *cobra.Command, args []string) {
 			return
 		}
 
+		if r.Method == http.MethodPost {
+			type manualActivityRequest struct {
+				Title           string   `json:"title"`
+				Date            string   `json:"date"` // YYYY-MM-DD HH:MM
+				Sport           string   `json:"sport"`
+				Distance        float64  `json:"distance"` // in display units (miles or km)
+				DurationHours   int      `json:"duration_hours"`
+				DurationMinutes int      `json:"duration_minutes"`
+				DurationSeconds int      `json:"duration_seconds"`
+				AvgHR           *float64 `json:"avg_hr"`
+				MaxHR           *float64 `json:"max_hr"`
+				Elevation       float64  `json:"elevation"` // in display units (feet or meters)
+				Location        string   `json:"location"`
+				Description     string   `json:"description"`
+				IsRace          bool     `json:"is_race"`
+			}
+
+			var req manualActivityRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			if req.Title == "" || req.Date == "" || req.Sport == "" {
+				http.Error(w, "Missing required fields: title, date, or sport", http.StatusBadRequest)
+				return
+			}
+
+			var actTime time.Time
+			var err error
+			actTime, err = time.ParseInLocation("2006-01-02 15:04", req.Date, time.Local)
+			if err != nil {
+				actTime, err = time.ParseInLocation("2006-01-02T15:04", req.Date, time.Local)
+				if err != nil {
+					http.Error(w, "Invalid date format. Use YYYY-MM-DD HH:MM", http.StatusBadRequest)
+					return
+				}
+			}
+
+			distanceMeters := 0.0
+			if cfg.DistanceUnit == "km" {
+				distanceMeters = req.Distance * 1000.0
+			} else {
+				distanceMeters = req.Distance / 0.000621371
+			}
+
+			durationSeconds := float64(req.DurationHours*3600 + req.DurationMinutes*60 + req.DurationSeconds)
+
+			elevationMeters := 0.0
+			if cfg.DistanceUnit == "km" {
+				elevationMeters = req.Elevation
+			} else {
+				elevationMeters = req.Elevation / 3.28084
+			}
+
+			// Automatically mark as Trail Run if run and elevation gain >= 1200 ft (365.76m)
+			sport := req.Sport
+			if sport == "Run" && elevationMeters >= 365.76 {
+				sport = "Trail Run"
+			}
+
+			// Automatically mark as race if title contains "race"
+			isRace := req.IsRace
+			if strings.Contains(strings.ToLower(req.Title), "race") {
+				isRace = true
+			}
+
+			activityID := time.Now().UnixNano()
+			act := &models.Activity{
+				ID:                  activityID,
+				Provider:            "local",
+				Sport:               sport,
+				Title:               req.Title,
+				StartTime:           actTime,
+				DistanceMeters:      distanceMeters,
+				DurationSeconds:     durationSeconds,
+				AvgHR:               req.AvgHR,
+				MaxHR:               req.MaxHR,
+				ElevationGainMeters: elevationMeters,
+				Description:         req.Description,
+				LocationName:        req.Location,
+				IsRace:              isRace,
+				RawData:             "{}",
+			}
+
+			if err := database.InsertOrUpdateActivity(act); err != nil {
+				http.Error(w, fmt.Sprintf("Failed to save activity: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			// Re-run the merger for this week and save
+			mon := storage.GetMondayOfWeek(actTime)
+			weekStart := time.Date(mon.Year(), mon.Month(), mon.Day(), 0, 0, 0, 0, time.Local)
+			weekEnd := weekStart.AddDate(0, 0, 7).Add(-1 * time.Second)
+
+			gRaw, sRaw, err := database.GetRawActivitiesForSync(weekStart, weekEnd)
+			if err == nil {
+				mergedList := merger.MergeActivities(gRaw, sRaw)
+				database.ClearMergedActivitiesRange(weekStart, weekEnd)
+				for _, ma := range mergedList {
+					id, err := database.SaveMergedActivity(ma)
+					if err == nil {
+						ma.ID = id
+					}
+				}
+
+				database.AutoLinkWorkouts()
+
+				// Rewrite weekly summary and master lists
+				weekActs, err := database.GetMergedActivitiesForRange(weekStart, weekEnd)
+				if err == nil && len(weekActs) > 0 {
+					vaultPath, err := cfg.GetVaultPath()
+					if err == nil {
+						storage.WriteWeeklyNote(vaultPath, cfg.ObsidianFolder, weekStart, weekActs, cfg.DistanceUnit)
+						
+						allRaces, err := database.GetMergedRaces(nil)
+						if err == nil {
+							storage.WriteRaceNotes(vaultPath, cfg.ObsidianFolder, allRaces, cfg.DistanceUnit)
+						}
+						allTrails, err := database.GetMergedTrailRuns(nil)
+						if err == nil {
+							storage.WriteTrailRunNotes(vaultPath, cfg.ObsidianFolder, allTrails, cfg.DistanceUnit)
+						}
+					}
+				}
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "id": activityID})
+			return
+		}
+
+		// Handle GET
 		startEpoch := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
 		endEpoch := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -152,7 +287,6 @@ func runServer(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		// Convert distances/paces to display formats
 		type viewActivity struct {
 			ID                  int64    `json:"id"`
 			Date                string   `json:"date"`
