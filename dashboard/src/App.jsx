@@ -14,7 +14,9 @@ import {
   CloudSun,
   PlusCircle,
   ArrowLeft,
-  Heart
+  Heart,
+  Compass,
+  ChevronsUp
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -35,7 +37,8 @@ function App() {
   const [races, setRaces] = useState([]);
   const [weather, setWeather] = useState(null);
   
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'add-activity'
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'races-trails', or 'add-activity'
+  const [racesTrailsSubTab, setRacesTrailsSubTab] = useState('races'); // 'races' or 'trails'
   const [filterSport, setFilterSport] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -258,6 +261,15 @@ function App() {
     return matchSport && matchQuery;
   });
 
+  // Filter for Races & Trails page
+  const isMetric = stats?.distance_unit === 'km';
+  const raceActivities = (activities || []).filter(a => a && a.is_race);
+  const trailActivities = (activities || []).filter(a => a && (a.sport === 'Trail Run' || (a.sport === 'Run' && a.elevation_gain_meters >= 365.76)));
+
+  // Calculate summary stats
+  const totalRaceDistance = raceActivities.reduce((sum, a) => sum + (a.distance_meters * (isMetric ? 0.001 : 0.000621371)), 0);
+  const totalTrailElevation = trailActivities.reduce((sum, a) => sum + (a.elevation_gain_meters * (isMetric ? 1 : 3.28084)), 0);
+
   return (
     <div>
       {/* Navigation Header */}
@@ -293,6 +305,27 @@ function App() {
           >
             <TrendingUp size={16} /> Dashboard
           </button>
+
+          <button 
+            onClick={() => setCurrentView('races-trails')}
+            style={{
+              background: currentView === 'races-trails' ? 'var(--accent-run)' : 'rgba(255,255,255,0.05)',
+              border: '1px solid var(--card-border)',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              color: '#fff',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'background 0.2s',
+              outline: 'none'
+            }}
+          >
+            <Compass size={16} /> Races & Trails
+          </button>
           
           <button 
             onClick={() => setCurrentView('add-activity')}
@@ -326,7 +359,7 @@ function App() {
         </div>
       </header>
 
-      {currentView === 'dashboard' ? (
+      {currentView === 'dashboard' && (
         <div>
           {/* KPI Cards */}
           <div className="stats-grid">
@@ -688,7 +721,216 @@ function App() {
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {currentView === 'races-trails' && (
+        <div>
+          {/* Races & Trails Summary Cards */}
+          <div className="stats-grid" style={{ marginBottom: '24px' }}>
+            <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div style={{ background: 'rgba(255, 183, 3, 0.1)', color: '#ffb703', padding: '16px', borderRadius: '12px' }}>
+                <Award size={28} />
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Races Run</div>
+                <div style={{ fontSize: '28px', fontWeight: '700', marginTop: '4px' }}>
+                  {raceActivities.length} <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-secondary)' }}>events</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div style={{ background: 'rgba(255, 51, 102, 0.1)', color: 'var(--accent-run)', padding: '16px', borderRadius: '12px' }}>
+                <TrendingUp size={28} />
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Race Distance</div>
+                <div style={{ fontSize: '28px', fontWeight: '700', marginTop: '4px' }}>
+                  {totalRaceDistance.toFixed(1)} <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-secondary)' }}>{stats?.distance_unit || 'miles'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '16px', borderRadius: '12px' }}>
+                <Compass size={28} />
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Trail Runs</div>
+                <div style={{ fontSize: '28px', fontWeight: '700', marginTop: '4px' }}>
+                  {trailActivities.length} <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-secondary)' }}>runs</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div style={{ background: 'rgba(0, 245, 212, 0.1)', color: 'var(--accent-ride)', padding: '16px', borderRadius: '12px' }}>
+                <ChevronsUp size={28} />
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Vert Gained</div>
+                <div style={{ fontSize: '28px', fontWeight: '700', marginTop: '4px' }}>
+                  {Math.round(totalTrailElevation).toLocaleString()} <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-secondary)' }}>{isMetric ? 'm' : 'ft'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-tab selection */}
+          <div className="card" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--card-border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid var(--card-border)', padding: '2px' }}>
+                <button 
+                  onClick={() => setRacesTrailsSubTab('races')}
+                  style={{
+                    background: racesTrailsSubTab === 'races' ? 'var(--accent-run)' : 'transparent',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'background 0.2s'
+                  }}
+                >
+                  🏆 Races ({raceActivities.length})
+                </button>
+                <button 
+                  onClick={() => setRacesTrailsSubTab('trails')}
+                  style={{
+                    background: racesTrailsSubTab === 'trails' ? 'var(--accent-run)' : 'transparent',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'background 0.2s'
+                  }}
+                >
+                  🌲 Trail Runs ({trailActivities.length})
+                </button>
+              </div>
+
+              <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                {racesTrailsSubTab === 'races' 
+                  ? 'Showing all historical race events' 
+                  : `Showing all runs over 1,200 ft (${isMetric ? '365m' : '1,200ft'}) of vertical gain`
+                }
+              </div>
+            </div>
+
+            {/* List Table */}
+            <div className="table-container">
+              <table>
+                <thead>
+                  {racesTrailsSubTab === 'races' ? (
+                    <tr>
+                      <th>Date</th>
+                      <th>Race Name</th>
+                      <th>Distance</th>
+                      <th>Time</th>
+                      <th>Pace/Speed</th>
+                      <th>Elevation</th>
+                      <th>Location</th>
+                      <th>Sources</th>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <th>Date</th>
+                      <th>Trail Run</th>
+                      <th>Distance</th>
+                      <th>Vert Gain</th>
+                      <th>Time</th>
+                      <th>Pace</th>
+                      <th>Location</th>
+                      <th>Sources</th>
+                    </tr>
+                  )}
+                </thead>
+                <tbody>
+                  {racesTrailsSubTab === 'races' ? (
+                    raceActivities.map(a => (
+                      <tr key={a.id}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{a.date}</td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontWeight: '600', color: '#fff' }}>🏆 {a.title}</span>
+                            <span className={`badge badge-${(a.sport || 'other').toLowerCase().replace(/\s+/g, '-')}`} style={{ width: 'fit-content' }}>
+                              {a.sport}
+                            </span>
+                          </div>
+                        </td>
+                        <td>{a.distance_display}</td>
+                        <td>{a.duration_display}</td>
+                        <td>{a.pace_display}</td>
+                        <td>{a.elevation_display}</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{a.location_name || '-'}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {(a.sources || []).map(src => (
+                              <span key={src} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--card-border)', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', textTransform: 'uppercase' }}>
+                                {src}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    trailActivities.map(a => (
+                      <tr key={a.id}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{a.date}</td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontWeight: '600', color: '#fff' }}>🌲 {a.title}</span>
+                            {a.is_race && (
+                              <span style={{ fontSize: '11px', background: 'rgba(255, 183, 3, 0.15)', color: '#ffb703', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(255, 183, 3, 0.3)', width: 'fit-content', fontWeight: '600' }}>Race</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>{a.distance_display}</td>
+                        <td>{a.elevation_display}</td>
+                        <td>{a.duration_display}</td>
+                        <td>{a.pace_display}</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{a.location_name || '-'}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {(a.sources || []).map(src => (
+                              <span key={src} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--card-border)', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', textTransform: 'uppercase' }}>
+                                {src}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+
+                  {((racesTrailsSubTab === 'races' && raceActivities.length === 0) || 
+                    (racesTrailsSubTab === 'trails' && trailActivities.length === 0)) && (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
+                        No activities found in this category.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {currentView === 'add-activity' && (
         /* Manual Activity Creation Form */
         <div style={{ maxWidth: '650px', margin: '0 auto' }}>
           <button 
