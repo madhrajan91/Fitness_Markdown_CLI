@@ -16,7 +16,9 @@ import {
   ArrowLeft,
   Heart,
   Compass,
-  ChevronsUp
+  ChevronsUp,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -38,6 +40,16 @@ function App() {
   const [weather, setWeather] = useState(null);
   
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'races-trails', or 'add-activity'
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
   const [racesTrailsSubTab, setRacesTrailsSubTab] = useState('races'); // 'races' or 'trails'
   const [filterSport, setFilterSport] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -294,18 +306,18 @@ function App() {
           <button 
             onClick={() => setCurrentView('dashboard')}
             style={{
-              background: currentView === 'dashboard' ? 'var(--accent-run)' : 'rgba(255,255,255,0.05)',
+              background: currentView === 'dashboard' ? 'var(--accent-run)' : 'rgba(128,128,128,0.1)',
               border: '1px solid var(--card-border)',
               borderRadius: '8px',
               padding: '8px 16px',
-              color: '#fff',
+              color: currentView === 'dashboard' ? '#fff' : 'var(--text-primary)',
               fontSize: '14px',
               fontWeight: '600',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              transition: 'background 0.2s',
+              transition: 'background 0.2s, color 0.2s',
               outline: 'none'
             }}
           >
@@ -315,18 +327,18 @@ function App() {
           <button 
             onClick={() => setCurrentView('races-trails')}
             style={{
-              background: currentView === 'races-trails' ? 'var(--accent-run)' : 'rgba(255,255,255,0.05)',
+              background: currentView === 'races-trails' ? 'var(--accent-run)' : 'rgba(128,128,128,0.1)',
               border: '1px solid var(--card-border)',
               borderRadius: '8px',
               padding: '8px 16px',
-              color: '#fff',
+              color: currentView === 'races-trails' ? '#fff' : 'var(--text-primary)',
               fontSize: '14px',
               fontWeight: '600',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              transition: 'background 0.2s',
+              transition: 'background 0.2s, color 0.2s',
               outline: 'none'
             }}
           >
@@ -336,22 +348,42 @@ function App() {
           <button 
             onClick={() => setCurrentView('add-activity')}
             style={{
-              background: currentView === 'add-activity' ? 'var(--accent-run)' : 'rgba(255,255,255,0.05)',
+              background: currentView === 'add-activity' ? 'var(--accent-run)' : 'rgba(128,128,128,0.1)',
               border: '1px solid var(--card-border)',
               borderRadius: '8px',
               padding: '8px 16px',
-              color: '#fff',
+              color: currentView === 'add-activity' ? '#fff' : 'var(--text-primary)',
               fontSize: '14px',
               fontWeight: '600',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              transition: 'background 0.2s',
+              transition: 'background 0.2s, color 0.2s',
               outline: 'none'
             }}
           >
             <PlusCircle size={16} /> Add Activity
+          </button>
+
+          <button 
+            onClick={toggleTheme}
+            style={{
+              background: 'rgba(128,128,128,0.1)',
+              border: '1px solid var(--card-border)',
+              borderRadius: '8px',
+              padding: '8px',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s, color 0.2s',
+              outline: 'none'
+            }}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
           
           {weather && weather.daily && weather.daily.temperature_2m_max && weather.daily.temperature_2m_max[0] !== undefined && (
@@ -437,7 +469,7 @@ function App() {
                       <XAxis dataKey="week" stroke="var(--text-secondary)" fontSize={12} tickLine={false} />
                       <YAxis stroke="var(--text-secondary)" fontSize={12} tickLine={false} />
                       <Tooltip 
-                        contentStyle={{ background: '#1c1e27', border: '1px solid var(--card-border)', borderRadius: '8px', color: '#fff' }} 
+                        contentStyle={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '8px', color: 'var(--text-primary)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }} 
                         labelStyle={{ fontWeight: 'bold', color: 'var(--accent-run)' }}
                       />
                       <Bar dataKey="Run" name="Run" fill="var(--accent-run)" radius={[4, 4, 0, 0]} stackId="a" />
@@ -466,11 +498,11 @@ function App() {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         style={{
-                          background: 'rgba(255,255,255,0.04)',
+                          background: 'rgba(128,128,128,0.05)',
                           border: '1px solid var(--card-border)',
                           borderRadius: '8px',
                           padding: '8px 12px 8px 32px',
-                          color: '#fff',
+                          color: 'var(--text-primary)',
                           fontSize: '14px',
                           outline: 'none',
                           width: '180px'
@@ -478,7 +510,7 @@ function App() {
                       />
                     </div>
 
-                    <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid var(--card-border)', padding: '2px' }}>
+                    <div style={{ display: 'flex', background: 'rgba(128,128,128,0.05)', borderRadius: '8px', border: '1px solid var(--card-border)', padding: '2px' }}>
                       {['All', 'Run', 'Trail Run', 'Ride', 'Swim', 'Walk'].map(sport => (
                         <button 
                           key={sport} 
@@ -488,7 +520,7 @@ function App() {
                             border: 'none',
                             borderRadius: '6px',
                             padding: '6px 12px',
-                            color: '#fff',
+                            color: filterSport === sport ? '#fff' : 'var(--text-secondary)',
                             fontSize: '13px',
                             fontWeight: '500',
                             cursor: 'pointer',
@@ -790,7 +822,7 @@ function App() {
           {/* Sub-tab selection */}
           <div className="card" style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--card-border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid var(--card-border)', padding: '2px' }}>
+              <div style={{ display: 'flex', background: 'rgba(128,128,128,0.1)', borderRadius: '8px', border: '1px solid var(--card-border)', padding: '2px' }}>
                 <button 
                   onClick={() => setRacesTrailsSubTab('races')}
                   style={{
@@ -798,14 +830,14 @@ function App() {
                     border: 'none',
                     borderRadius: '6px',
                     padding: '8px 16px',
-                    color: '#fff',
+                    color: racesTrailsSubTab === 'races' ? '#fff' : 'var(--text-secondary)',
                     fontSize: '14px',
                     fontWeight: '600',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    transition: 'background 0.2s'
+                    transition: 'background 0.2s, color 0.2s'
                   }}
                 >
                   🏆 Races ({raceActivities.length})
@@ -817,14 +849,14 @@ function App() {
                     border: 'none',
                     borderRadius: '6px',
                     padding: '8px 16px',
-                    color: '#fff',
+                    color: racesTrailsSubTab === 'trails' ? '#fff' : 'var(--text-secondary)',
                     fontSize: '14px',
                     fontWeight: '600',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    transition: 'background 0.2s'
+                    transition: 'background 0.2s, color 0.2s'
                   }}
                 >
                   🌲 Trail Runs ({trailActivities.length})

@@ -20,6 +20,21 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Light Theme Variables */
+:root[data-theme='light'] {
+  --bg: #f8fafc;
+  --card-bg: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(0, 0, 0, 0.08);
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --accent-run: #e11d48;
+  --accent-ride: #0d9488;
+  --accent-swim: #2563eb;
+  --accent-walk: #d97706;
+  --accent-glow: rgba(225, 29, 72, 0.08);
 }
 
 body {
@@ -29,6 +44,12 @@ body {
   background-attachment: fixed;
   background-image: radial-gradient(circle at 10% 20%, rgba(255, 51, 102, 0.05) 0%, transparent 40%),
                     radial-gradient(circle at 90% 80%, rgba(0, 245, 212, 0.04) 0%, transparent 40%);
+  transition: background-color 0.3s ease;
+}
+
+:root[data-theme='light'] body {
+  background-image: radial-gradient(circle at 10% 20%, rgba(255, 51, 102, 0.03) 0%, transparent 40%),
+                    radial-gradient(circle at 90% 80%, rgba(0, 245, 212, 0.02) 0%, transparent 40%);
 }
 
 #root {
@@ -46,12 +67,21 @@ body {
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
+}
+
+:root[data-theme='light'] .card {
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
 }
 
 .card:hover {
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme='light'] .card:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.1);
 }
 
 /* Scrollbar styling */
@@ -64,9 +94,17 @@ body {
   background: rgba(255, 255, 255, 0.02);
 }
 
+:root[data-theme='light'] ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
+}
+
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
+}
+
+:root[data-theme='light'] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -117,13 +155,18 @@ th {
 
 td {
   padding: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--card-border);
   font-size: 15px;
   color: var(--text-primary);
+  transition: background-color 0.2s ease;
 }
 
 tr:hover td {
   background: rgba(255, 255, 255, 0.02);
+}
+
+:root[data-theme='light'] tr:hover td {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 /* Badges */
@@ -164,4 +207,21 @@ tr:hover td {
   background: rgba(16, 185, 129, 0.12);
   color: #10b981;
   border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* Global input styling for dark/light mode compatibility */
+input[type='text'],
+input[type='number'],
+input[type='url'],
+input[type='datetime-local'],
+select,
+textarea {
+  color: var(--text-primary) !important;
+  background: rgba(128, 128, 128, 0.05) !important;
+}
+
+/* Fix dropdown option colors in browser default menus */
+select option {
+  background: var(--bg);
+  color: var(--text-primary);
 }
