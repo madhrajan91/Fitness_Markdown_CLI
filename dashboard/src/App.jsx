@@ -108,21 +108,24 @@ function App() {
     // format date as "YYYY-MM-DD HH:MM"
     const formattedDate = formDate.replace('T', ' ');
 
+    const distanceVal = parseFloat(formDistance);
+    const elevationVal = parseFloat(formElevation || '0');
+
     const payload = {
       title: formTitle,
       date: formattedDate,
       sport: formSport,
-      distance: parseFloat(formDistance),
-      duration_hours: parseInt(formHours || '0', 10),
-      duration_minutes: parseInt(formMinutes || '0', 10),
-      duration_seconds: parseInt(formSeconds || '0', 10),
-      avg_hr: formAvgHR ? parseFloat(formAvgHR) : null,
-      max_hr: formMaxHR ? parseFloat(formMaxHR) : null,
-      elevation: parseFloat(formElevation || '0'),
-      location: formLocation,
-      description: formDescription,
-      is_race: formIsRace,
-      links: formLinks
+      distance: isNaN(distanceVal) ? 0.0 : distanceVal,
+      duration_hours: parseInt(formHours || '0', 10) || 0,
+      duration_minutes: parseInt(formMinutes || '0', 10) || 0,
+      duration_seconds: parseInt(formSeconds || '0', 10) || 0,
+      avg_hr: formAvgHR && !isNaN(parseFloat(formAvgHR)) ? parseFloat(formAvgHR) : null,
+      max_hr: formMaxHR && !isNaN(parseFloat(formMaxHR)) ? parseFloat(formMaxHR) : null,
+      elevation: isNaN(elevationVal) ? 0.0 : elevationVal,
+      location: formLocation || '',
+      description: formDescription || '',
+      is_race: !!formIsRace,
+      links: formLinks || ''
     };
 
     try {
