@@ -172,7 +172,7 @@ func runServer(cmd *cobra.Command, args []string) {
 			IsRace              bool     `json:"is_race"`
 		}
 
-		var list []viewActivity
+		list := make([]viewActivity, 0)
 		for i := len(activities) - 1; i >= 0; i-- {
 			a := activities[i]
 			list = append(list, viewActivity{
@@ -217,7 +217,7 @@ func runServer(cmd *cobra.Command, args []string) {
 			Workouts []*models.PlannedWorkout `json:"workouts"`
 		}
 
-		var response []planWithWorkouts
+		response := make([]planWithWorkouts, 0)
 		for _, p := range plans {
 			workouts, err := database.GetPlannedWorkoutsForPlan(p.ID)
 			if err == nil {
@@ -226,6 +226,9 @@ func runServer(cmd *cobra.Command, args []string) {
 					if w.Status == "Scheduled" && w.PlannedDate.Before(time.Now().Truncate(24*time.Hour)) {
 						w.Status = "Missed"
 					}
+				}
+				if workouts == nil {
+					workouts = make([]*models.PlannedWorkout, 0)
 				}
 				response = append(response, planWithWorkouts{
 					Plan:     p,

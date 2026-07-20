@@ -19,9 +19,7 @@ import {
   XAxis, 
   YAxis, 
   Tooltip, 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area 
+  ResponsiveContainer 
 } from 'recharts';
 
 // API base path. In development it can be proxied or explicitly point to http://localhost:8080
@@ -42,17 +40,17 @@ function App() {
     async function fetchData() {
       try {
         const [statsRes, actsRes, plansRes, racesRes, weatherRes] = await Promise.all([
-          fetch(`${API_BASE}/api/stats`).then(r => r.json()),
-          fetch(`${API_BASE}/api/activities`).then(r => r.json()),
-          fetch(`${API_BASE}/api/plans`).then(r => r.json()),
-          fetch(`${API_BASE}/api/races`).then(r => r.json()),
+          fetch(`${API_BASE}/api/stats`).then(r => r.json()).catch(() => null),
+          fetch(`${API_BASE}/api/activities`).then(r => r.json()).catch(() => []),
+          fetch(`${API_BASE}/api/plans`).then(r => r.json()).catch(() => []),
+          fetch(`${API_BASE}/api/races`).then(r => r.json()).catch(() => []),
           fetch(`${API_BASE}/api/weather`).then(r => r.json()).catch(() => null)
         ]);
 
         setStats(statsRes);
-        setActivities(actsRes);
-        setPlans(plansRes);
-        setRaces(racesRes);
+        setActivities(actsRes || []);
+        setPlans(plansRes || []);
+        setRaces(racesRes || []);
         setWeather(weatherRes);
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -96,7 +94,9 @@ function App() {
     }
 
     // Populate with actual activities
-    activities.forEach(a => {
+    const acts = activities || [];
+    acts.forEach(a => {
+      if (!a || !a.date) return;
       const actDate = new Date(a.date);
       const day = actDate.getDay();
       const diff = actDate.getDate() - day + (day === 0 ? -6 : 1);
@@ -124,12 +124,13 @@ function App() {
   const chartData = getWeeklyVolumeData();
 
   // Filter activities
-  const filteredActivities = activities.filter(a => {
+  const filteredActivities = (activities || []).filter(a => {
+    if (!a) return false;
     const matchSport = filterSport === 'All' || a.sport === filterSport;
     const query = searchQuery.toLowerCase();
-    const matchQuery = a.title.toLowerCase().includes(query) || 
-                       (a.location_name && a.location_name.toLowerCase().includes(query)) ||
-                       a.sport.toLowerCase().includes(query);
+    const matchQuery = (a.title || '').toLowerCase().includes(query) || 
+                       ((a.location_name || '').toLowerCase().includes(query)) ||
+                       (a.sport || '').toLowerCase().includes(query);
     return matchSport && matchQuery;
   });
 
@@ -147,7 +148,7 @@ function App() {
           </p>
         </div>
         
-        {weather && weather.daily && (
+        {weather && weather.daily && weather.daily.temperature_2m_max && weather.daily.temperature_2m_max[0] !== undefined && (
           <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 20px', borderRadius: '12px' }}>
             <CloudSun size={24} style={{ color: 'var(--accent-ride)' }} />
             <div style={{ textAlign: 'right' }}>
@@ -171,7 +172,7 @@ function App() {
           <div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Distance</div>
             <div style={{ fontSize: '28px', fontWeight: '700', marginTop: '4px' }}>
-              {stats?.total_distance.toFixed(1)} <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-secondary)' }}>{stats?.distance_unit}</span>
+              {stats?.total_distance ? stats.total_distance.toFixed(1) : '0.0'} <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-secondary)' }}>{stats?.distance_unit || 'miles'}</span>
             </div>
           </div>
         </div>
@@ -183,7 +184,7 @@ function App() {
           <div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Time</div>
             <div style={{ fontSize: '28px', fontWeight: '700', marginTop: '4px' }}>
-              {stats?.total_duration_hours.toFixed(1)} <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-secondary)' }}>hrs</span>
+              {stats?.total_duration_hours ? stats.total_duration_hours.toFixed(1) : '0.0'} <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-secondary)' }}>hrs</span>
             </div>
           </div>
         </div>
@@ -195,7 +196,7 @@ function App() {
           <div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Plan Compliance</div>
             <div style={{ fontSize: '28px', fontWeight: '700', marginTop: '4px' }}>
-              {stats?.compliance_rate.toFixed(1)}%
+              {stats?.compliance_rate ? stats.compliance_rate.toFixed(1) : '0.0'}%
             </div>
           </div>
         </div>
@@ -206,11 +207,11 @@ function App() {
           </div>
           <div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Next Race</div>
-            <div style={{ fontSize: '20px', fontWeight: '700', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={stats?.next_race_title}>
-              {stats?.next_race_title}
+            <div style={{ fontSize: '20px', fontWeight: '700', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={stats?.next_race_title || 'None'}>
+              {stats?.next_race_title || 'None'}
             </div>
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              {stats?.next_race_days !== -1 ? `${stats.next_race_days} days to go` : 'Not registered'}
+              {stats?.next_race_days !== undefined && stats.next_race_days !== -1 ? `${stats.next_race_days} days to go` : 'Not registered'}
             </div>
           </div>
         </div>
@@ -318,7 +319,7 @@ function App() {
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <span style={{ fontWeight: '500' }}>{a.title}</span>
-                          <span className={`badge badge-${a.sport.toLowerCase()}`} style={{ width: 'fit-content' }}>
+                          <span className={`badge badge-${(a.sport || 'other').toLowerCase()}`} style={{ width: 'fit-content' }}>
                             {a.sport}
                           </span>
                         </div>
@@ -330,7 +331,7 @@ function App() {
                       <td style={{ color: 'var(--text-secondary)' }}>{a.location_name || '-'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          {a.sources.map(src => (
+                          {(a.sources || []).map(src => (
                             <span 
                               key={src} 
                               style={{ 
@@ -372,7 +373,7 @@ function App() {
               Training Plan
             </h2>
             
-            {plans.length === 0 ? (
+            {plans.length === 0 || !plans[0] || !plans[0].plan ? (
               <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
                 No active training plan. Import one using:
                 <code style={{ display: 'block', marginTop: '8px', textAlign: 'left', wordBreak: 'break-all' }}>
@@ -395,7 +396,7 @@ function App() {
 
                 {/* Planned Workouts List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto', paddingRight: '4px' }}>
-                  {plans[0].workouts.map(w => {
+                  {(plans[0].workouts || []).map(w => {
                     const statusColor = w.Status === 'Completed' ? '#00f5d4' :
                                       w.Status === 'Missed' ? '#ff3366' : '#9ca3af';
                     
@@ -457,7 +458,7 @@ function App() {
             </h2>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
-              {races.length === 0 ? (
+              {!races || races.length === 0 ? (
                 <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
                   No upcoming races synced.
                 </div>
