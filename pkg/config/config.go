@@ -32,6 +32,7 @@ type Config struct {
 	WeatherLon        *float64     `json:"weather_lon"`
 	Garmin            GarminConfig `json:"garmin"`
 	Strava            StravaConfig `json:"strava"`
+	EnableObsidian    bool         `json:"enable_obsidian"`
 }
 
 // GetConfigDir returns the absolute path to the configuration directory
