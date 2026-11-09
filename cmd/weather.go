@@ -44,40 +44,13 @@ func runWeather(cmd *cobra.Command, args []string) {
 	}
 
 	// 1. Resolve Location Coordinates
-	var lat, lon float64
-	locName := ""
-
-	if weatherLat != 0.0 && weatherLon != 0.0 {
-		lat = weatherLat
-		lon = weatherLon
-		locName = fmt.Sprintf("Override (%.4f, %.4f)", lat, lon)
-	} else if weatherLoc != "" {
+	if weatherLoc != "" && !(weatherLat != 0.0 && weatherLon != 0.0) {
 		fmt.Printf("Geocoding location '%s'...\n", weatherLoc)
-		resolved, err := client.GeocodeLocation(weatherLoc)
-		if err != nil {
-			fmt.Printf("Error geocoding location: %v\n", err)
-			return
-		}
-		lat = resolved["lat"].(float64)
-		lon = resolved["lon"].(float64)
-		locName = resolved["name"].(string)
-	} else if cfg.WeatherLat != nil && cfg.WeatherLon != nil {
-		lat = *cfg.WeatherLat
-		lon = *cfg.WeatherLon
-		locName = cfg.WeatherLocation
-	} else {
-		// Fallback to IP geolocation
-		res, err := client.GeolocateByIP()
-		if err == nil {
-			lat = res["lat"].(float64)
-			lon = res["lon"].(float64)
-			locName = res["name"].(string)
-		} else {
-			// default fallback
-			lat = 42.3709
-			lon = -71.1828
-			locName = "Watertown, Massachusetts, United States"
-		}
+	}
+	lat, lon, locName, err := resolveWeatherLocation(cfg, weatherLoc, weatherLat, weatherLon, weatherLat != 0.0 && weatherLon != 0.0)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
 	}
 
 	// 2. Resolve Date range

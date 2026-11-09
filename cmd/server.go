@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,8 @@ import (
 
 var (
 	serverPort      int
+	serverHost      string
+	serverNoBrowser bool
 	DashboardAssets embed.FS
 )
 
@@ -33,6 +37,8 @@ var serverCmd = &cobra.Command{
 
 func init() {
 	serverCmd.Flags().IntVar(&serverPort, "port", 8080, "Port to run the dashboard server on")
+	serverCmd.Flags().StringVar(&serverHost, "host", "127.0.0.1", "Address to bind the server to")
+	serverCmd.Flags().BoolVar(&serverNoBrowser, "no-browser", false, "Don't open the dashboard in a browser on start")
 	rootCmd.AddCommand(serverCmd)
 }
 
@@ -51,8 +57,87 @@ func runServer(cmd *cobra.Command, args []string) {
 	defer database.Close()
 
 	// API Handlers
+	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w, r)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":        "ok",
+			"version":       Version,
+			"api_version":   apiVersion,
+			"distance_unit": cfg.DistanceUnit,
+		})
+	})
+
+	// Sync: POST /api/sync?days=N (or start=&end=) starts a background sync;
+	// GET /api/sync/status reports its progress.
+	syncs := newSyncJob()
+	http.HandleFunc("/api/sync", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w, r)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "use POST to start a sync", http.StatusMethodNotAllowed)
+			return
+		}
+
+		q := r.URL.Query()
+		days := 7
+		if s := q.Get("days"); s != "" {
+			n, err := strconv.Atoi(s)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("invalid days %q", s), http.StatusBadRequest)
+				return
+			}
+			days = n
+		}
+		start, end, err := resolveSyncRange(days, q.Get("start"), q.Get("end"), time.Now())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Reload the config so logins redone with `running-cli setup` are used.
+		syncCfg, err := config.LoadConfig()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !syncCfg.IsGarminConfigured() && !syncCfg.IsStravaConfigured() {
+			http.Error(w, "neither Garmin nor Strava is configured: run 'running-cli setup'", http.StatusUnauthorized)
+			return
+		}
+
+		status, err := syncs.start(start, end, func(logf func(string, ...interface{})) (*activitySyncResult, error) {
+			return syncActivities(syncCfg, database, start, end, logf)
+		})
+		w.Header().Set("Content-Type", "application/json")
+		if err != nil {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusAccepted)
+		}
+		json.NewEncoder(w).Encode(status)
+	})
+
+	http.HandleFunc("/api/sync/status", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w, r)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(syncs.snapshot())
+	})
+
 	http.HandleFunc("/api/stats", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+		enableCors(w, r)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -138,7 +223,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	})
 
 	http.HandleFunc("/api/activities", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+		enableCors(w, r)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -260,7 +345,7 @@ func runServer(cmd *cobra.Command, args []string) {
 					vaultPath, err := cfg.GetVaultPath()
 					if err == nil {
 						storage.WriteWeeklyNote(vaultPath, cfg.ObsidianFolder, weekStart, weekActs, cfg.DistanceUnit)
-						
+
 						allRaces, err := database.GetMergedRaces(nil)
 						if err == nil {
 							storage.WriteRaceNotes(vaultPath, cfg.ObsidianFolder, allRaces, cfg.DistanceUnit)
@@ -279,37 +364,63 @@ func runServer(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		// Handle GET
-		startEpoch := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
-		endEpoch := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+		// Handle GET: all activities, one week with ?week=YYYY-MM-DD, or the
+		// activity with ?strava_id=N or ?garmin_id=N
+		source, sourceID, bySource, err := parseSourceIDParam(r.URL.Query())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		week := r.URL.Query().Get("week")
+		if bySource && week != "" {
+			http.Error(w, "give either week or a source id, not both", http.StatusBadRequest)
+			return
+		}
 
-		activities, err := database.GetMergedActivitiesForRange(startEpoch, endEpoch)
+		var activities []*models.MergedActivity
+		if bySource {
+			activities, err = database.GetMergedActivitiesBySourceID(source, sourceID)
+		} else {
+			rangeStart := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
+			rangeEnd := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+			if week != "" {
+				rangeStart, rangeEnd, err = parseWeekParam(week)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+			}
+			activities, err = database.GetMergedActivitiesForRange(rangeStart, rangeEnd)
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		type viewActivity struct {
-				ID                  int64    `json:"id"`
-				Date                string   `json:"date"`
-				Sport               string   `json:"sport"`
-				Title               string   `json:"title"`
-				DistanceMeters      float64  `json:"distance_meters"`
-				DistanceDisplay     string   `json:"distance_display"`
-				DurationSeconds     float64  `json:"duration_seconds"`
-				DurationDisplay     string   `json:"duration_display"`
-				PaceDisplay         string   `json:"pace_display"`
-				ElevationGainMeters float64  `json:"elevation_gain_meters"`
-				ElevationDisplay    string   `json:"elevation_display"`
-				LocationName        string   `json:"location_name"`
-				Latitude            *float64 `json:"latitude,omitempty"`
-				Longitude           *float64 `json:"longitude,omitempty"`
-				AvgHR               *float64 `json:"avg_hr"`
-				MaxHR               *float64 `json:"max_hr"`
-				Sources             []string `json:"sources"`
-				IsRace              bool     `json:"is_race"`
-				Links               string   `json:"links,omitempty"`
-			}
+			ID                  int64               `json:"id"`
+			Date                string              `json:"date"`
+			Sport               string              `json:"sport"`
+			Title               string              `json:"title"`
+			DistanceMeters      float64             `json:"distance_meters"`
+			DistanceDisplay     string              `json:"distance_display"`
+			DurationSeconds     float64             `json:"duration_seconds"`
+			DurationDisplay     string              `json:"duration_display"`
+			PaceDisplay         string              `json:"pace_display"`
+			ElevationGainMeters float64             `json:"elevation_gain_meters"`
+			ElevationDisplay    string              `json:"elevation_display"`
+			LocationName        string              `json:"location_name"`
+			Latitude            *float64            `json:"latitude,omitempty"`
+			Longitude           *float64            `json:"longitude,omitempty"`
+			AvgHR               *float64            `json:"avg_hr"`
+			MaxHR               *float64            `json:"max_hr"`
+			GarminID            *int64              `json:"garmin_id,omitempty"`
+			StravaID            *int64              `json:"strava_id,omitempty"`
+			Sources             []string            `json:"sources"`
+			SourceLinks         []models.SourceLink `json:"source_links"`
+			IsRace              bool                `json:"is_race"`
+			Links               string              `json:"links,omitempty"`
+		}
 
 		list := make([]viewActivity, 0)
 		for i := len(activities) - 1; i >= 0; i-- {
@@ -331,7 +442,10 @@ func runServer(cmd *cobra.Command, args []string) {
 				Longitude:           a.Longitude,
 				AvgHR:               a.AvgHR,
 				MaxHR:               a.MaxHR,
+				GarminID:            a.GarminID,
+				StravaID:            a.StravaID,
 				Sources:             a.Sources,
+				SourceLinks:         a.SourceLinks(),
 				IsRace:              a.IsRace,
 				Links:               a.Links,
 			})
@@ -342,7 +456,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	})
 
 	http.HandleFunc("/api/plans", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+		enableCors(w, r)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -384,7 +498,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	})
 
 	http.HandleFunc("/api/races", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+		enableCors(w, r)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -401,34 +515,31 @@ func runServer(cmd *cobra.Command, args []string) {
 	})
 
 	http.HandleFunc("/api/weather", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+		enableCors(w, r)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		var lat, lon float64
-		if cfg.WeatherLat != nil {
-			lat = *cfg.WeatherLat
-		}
-		if cfg.WeatherLon != nil {
-			lon = *cfg.WeatherLon
+		wq, err := parseWeatherQuery(r.URL.Query(), time.Now())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 
-		if lat == 0.0 && lon == 0.0 {
-			res, err := client.GeolocateByIP()
-			if err == nil {
-				lat = res["lat"].(float64)
-				lon = res["lon"].(float64)
-			}
+		lat, lon, locName, err := resolveWeatherLocation(cfg, wq.Location, wq.Lat, wq.Lon, wq.HasCoords)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 
-		today := time.Now()
-		forecast, err := client.FetchWeather(lat, lon, today, today.AddDate(0, 0, 4), cfg.DistanceUnit)
+		forecast, err := client.FetchWeather(lat, lon, wq.Start, wq.Start.AddDate(0, 0, wq.Days-1), cfg.DistanceUnit)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		forecast["location"] = map[string]interface{}{"name": locName, "lat": lat, "lon": lon}
+		forecast["running"] = buildRunningWeather(forecast, cfg.DistanceUnit)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(forecast)
@@ -459,24 +570,32 @@ func runServer(cmd *cobra.Command, args []string) {
 		fsServer.ServeHTTP(w, r)
 	})
 
-	fmt.Printf("\n\033[1;32mStarting dashboard server on http://localhost:%d ...\033[0m\n", serverPort)
+	addr := net.JoinHostPort(serverHost, strconv.Itoa(serverPort))
+	fmt.Printf("\n\033[1;32mStarting dashboard server on http://%s ...\033[0m\n", addr)
 	fmt.Println("Press Ctrl+C to terminate.")
-	
-	// Launch browser automatically (optional default browser launch helper)
-	go func() {
-		time.Sleep(1 * time.Second)
-		launchBrowser(fmt.Sprintf("http://localhost:%d", serverPort))
-	}()
 
-	err = http.ListenAndServe(fmt.Sprintf(":%d", serverPort), nil)
+	if !serverNoBrowser {
+		go func() {
+			time.Sleep(1 * time.Second)
+			launchBrowser("http://" + addr)
+		}()
+	}
+
+	err = http.ListenAndServe(addr, nil)
 	if err != nil {
 		fmt.Printf("Server failed: %v\n", err)
 	}
 }
 
-func enableCors(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+// enableCors lets local pages (the Vite dev server) call the API. Other
+// origins get no CORS headers, so web pages can't read my data through the browser.
+func enableCors(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if !allowedOrigin(origin) {
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Vary", "Origin")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }
-

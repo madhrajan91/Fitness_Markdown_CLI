@@ -7,6 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version is set at build time with -ldflags "-X running_cli/cmd.Version=...".
+var Version = "dev"
+
 var rootCmd = &cobra.Command{
 	Use:   "running-cli",
 	Short: "running-cli pulls activities from Garmin & Strava, matches them, and syncs Obsidian weekly logs.",

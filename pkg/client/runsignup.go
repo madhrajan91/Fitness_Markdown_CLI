@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,19 @@ func FetchFutureRaces(zipcode string, radius int, start, end time.Time) ([]*mode
 	startDateStr := start.Format("2006-01-02")
 	endDateStr := end.Format("2006-01-02")
 
+	// Home coordinates: Default Belmont, MA (42.39593, -71.17867)
+	homeLat, homeLon := 42.39593, -71.17867
+	if zipcode != "" {
+		if geo, err := GeocodeLocation(zipcode + ", MA"); err == nil {
+			if lLat, ok := geo["lat"].(float64); ok && lLat != 0 {
+				homeLat = lLat
+			}
+			if lLon, ok := geo["lon"].(float64); ok && lLon != 0 {
+				homeLon = lLon
+			}
+		}
+	}
+
 	for {
 		apiURL := fmt.Sprintf(
 			"https://api.runsignup.com/rest/races?format=json&zipcode=%s&radius=%d&start_date=%s&end_date=%s&events=T&results_per_page=100&page=%d",
@@ -94,7 +108,10 @@ func FetchFutureRaces(zipcode string, radius int, start, end time.Time) ([]*mode
 		page++
 	}
 
+	geocodeCache := make(map[string][2]float64)
 	var results []*models.FutureRace
+	now := time.Now()
+
 	for _, race := range collected {
 		if race.IsDraftRace == "T" || race.IsPrivateRace == "T" {
 			continue
@@ -113,8 +130,9 @@ func FetchFutureRaces(zipcode string, radius int, start, end time.Time) ([]*mode
 			continue
 		}
 
-		// Filter for matching distances and collect display strings
+		// Filter for matching distances and collect display strings & events
 		var matchingDists []string
+		var matchingEvents []RunSignupEvent
 		for _, ev := range race.Events {
 			if ev.Volunteer == "T" {
 				continue
@@ -131,8 +149,8 @@ func FetchFutureRaces(zipcode string, radius int, start, end time.Time) ([]*mode
 
 			normDist := getNormalizedDistance(ev.Name, ev.Distance)
 			if normDist != "" {
-				// Detail status/fee parsing can be printed or saved, but for models.FutureRace we store main events
 				matchingDists = append(matchingDists, normDist)
+				matchingEvents = append(matchingEvents, ev)
 			}
 		}
 
@@ -150,17 +168,65 @@ func FetchFutureRaces(zipcode string, radius int, start, end time.Time) ([]*mode
 			}
 		}
 
+		// Summarize fees across matching events
+		var fees []string
+		feeMap := make(map[string]bool)
+		for _, ev := range matchingEvents {
+			f := GetEventFee(ev, now)
+			if f != "" && !feeMap[f] {
+				feeMap[f] = true
+				fees = append(fees, f)
+			}
+		}
+		priceDisplay := "N/A"
+		if len(fees) == 1 {
+			priceDisplay = fees[0]
+		} else if len(fees) > 1 {
+			priceDisplay = strings.Join(fees, " - ")
+		}
+
+		// Summarize capacities and statuses across matching events
+		capMap := GetRaceCapacities(race.RaceID, matchingEvents)
+		var statuses []string
+		statusMap := make(map[string]bool)
+		for _, ev := range matchingEvents {
+			s := capMap[ev.EventID]
+			regStatus := GetEventStatus(ev, now)
+			finalStat := s
+			if s == "Open" && regStatus != "Open" {
+				finalStat = regStatus
+			}
+			if finalStat != "" && !statusMap[finalStat] {
+				statusMap[finalStat] = true
+				statuses = append(statuses, finalStat)
+			}
+		}
+		statusDisplay := "Open"
+		if len(statuses) > 0 {
+			statusDisplay = strings.Join(statuses, "; ")
+		}
+
 		location := fmt.Sprintf("%s, %s", race.Address.City, race.Address.State)
 		if race.Address.City == "" {
 			location = race.Address.State
 		}
 
-		// Check if we can geocode coordinates for sorting/mapping (optional default 0)
+		// Geocode race location
 		lat, lon := 0.0, 0.0
-		geocoded, err := GeocodeLocation(location)
-		if err == nil {
-			lat, _ = geocoded["lat"].(float64)
-			lon, _ = geocoded["lon"].(float64)
+		if coords, found := geocodeCache[location]; found {
+			lat, lon = coords[0], coords[1]
+		} else {
+			geocoded, err := GeocodeLocation(location)
+			if err == nil {
+				lat, _ = geocoded["lat"].(float64)
+				lon, _ = geocoded["lon"].(float64)
+				geocodeCache[location] = [2]float64{lat, lon}
+			}
+		}
+
+		proximity := 0.0
+		if lat != 0.0 && lon != 0.0 {
+			proximity = HaversineDistance(homeLat, homeLon, lat, lon)
 		}
 
 		results = append(results, &models.FutureRace{
@@ -171,8 +237,19 @@ func FetchFutureRaces(zipcode string, radius int, start, end time.Time) ([]*mode
 			WebsiteURL:      race.URL,
 			Latitude:        lat,
 			Longitude:       lon,
+			Price:           priceDisplay,
+			Status:          statusDisplay,
+			ProximityMiles:  proximity,
 		})
 	}
+
+	// Sort results by RaceDate ascending, then ProximityMiles ascending
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].RaceDate.Equal(results[j].RaceDate) {
+			return results[i].ProximityMiles < results[j].ProximityMiles
+		}
+		return results[i].RaceDate.Before(results[j].RaceDate)
+	})
 
 	return results, nil
 }

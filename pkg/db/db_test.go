@@ -117,3 +117,52 @@ func TestDBAutoLinkWorkouts(t *testing.T) {
 		t.Errorf("Expected today's workout unlinked, got %v", wToday.AssociatedActivityID)
 	}
 }
+
+func TestGetMergedActivitiesBySourceID(t *testing.T) {
+	conn, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	db := &DB{conn: conn}
+	if err := db.migrate(); err != nil {
+		t.Fatal(err)
+	}
+
+	stravaID, garminID := int64(20062347587), int64(17000000001)
+	day := time.Date(2026, 9, 6, 8, 58, 0, 0, time.Local)
+	if _, err := db.SaveMergedActivity(&models.MergedActivity{
+		Date: day, StartTime: day, Sport: "Run", Title: "Morning Run",
+		StravaID: &stravaID, GarminID: &garminID, Sources: []string{"garmin", "strava"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveMergedActivity(&models.MergedActivity{
+		Date: day, StartTime: day, Sport: "Strength", Title: "Gym", Sources: []string{"local"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		source string
+		id     int64
+	}{{"strava", stravaID}, {"garmin", garminID}} {
+		got, err := db.GetMergedActivitiesBySourceID(c.source, c.id)
+		if err != nil {
+			t.Fatalf("%s: %v", c.source, err)
+		}
+		if len(got) != 1 || got[0].Title != "Morning Run" {
+			t.Fatalf("%s %d: got %d activities", c.source, c.id, len(got))
+		}
+		if got[0].StravaID == nil || *got[0].StravaID != stravaID {
+			t.Errorf("%s: strava id not scanned back", c.source)
+		}
+	}
+
+	if got, err := db.GetMergedActivitiesBySourceID("strava", 42); err != nil || len(got) != 0 {
+		t.Errorf("unknown id: got %d, %v", len(got), err)
+	}
+	if _, err := db.GetMergedActivitiesBySourceID("polar", 1); err == nil {
+		t.Error("unknown source: want error")
+	}
+}

@@ -20,10 +20,11 @@ import (
 )
 
 var (
-	syncDays      int
-	syncStartDate string
-	syncEndDate   string
-	syncRacesOnly bool
+	syncDays        int
+	syncStartDate   string
+	syncEndDate     string
+	syncRacesOnly   bool
+	syncFutureRaces bool
 )
 
 var syncCmd = &cobra.Command{
@@ -38,13 +39,38 @@ var importCacheCmd = &cobra.Command{
 	Run:   runImportCache,
 }
 
+var futureRacesCmd = &cobra.Command{
+	Use:   "future-races",
+	Short: "Fetch and sync upcoming races (5K, 10K, Half Marathon, Marathon) for the next 5 months to Obsidian",
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			fmt.Printf("Error loading config: %v\n", err)
+			return
+		}
+		vaultPath, err := cfg.GetVaultPath()
+		if err != nil {
+			fmt.Println("Error: Obsidian vault path is not configured. Run 'running-cli setup' first.")
+			return
+		}
+		zipcode := "02478" // Belmont MA default
+		zipRegex := regexpMustCompile(`\b\d{5}\b`)
+		if zipMatch := zipRegex.FindString(cfg.WeatherLocation); zipMatch != "" {
+			zipcode = zipMatch
+		}
+		syncFutureRacesRun(zipcode, 50, 5, vaultPath, cfg.ObsidianFolder, cfg.DistanceUnit)
+	},
+}
+
 func init() {
 	syncCmd.Flags().IntVar(&syncDays, "days", 7, "Number of days to sync from today")
 	syncCmd.Flags().StringVar(&syncStartDate, "start-date", "", "Sync start date YYYY-MM-DD (overrides --days)")
 	syncCmd.Flags().StringVar(&syncEndDate, "end-date", "", "Sync end date YYYY-MM-DD (defaults to today)")
 	syncCmd.Flags().BoolVar(&syncRacesOnly, "races-only", false, "Only sync races and skip generating weekly summaries")
+	syncCmd.Flags().BoolVar(&syncFutureRaces, "future-races", false, "Only sync future races schedule for the next 5 months")
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(importCacheCmd)
+	rootCmd.AddCommand(futureRacesCmd)
 }
 
 func runSync(cmd *cobra.Command, args []string) {
@@ -64,42 +90,28 @@ func runSync(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	if syncFutureRaces {
+		zipcode := "02478"
+		zipRegex := regexpMustCompile(`\b\d{5}\b`)
+		if zipMatch := zipRegex.FindString(cfg.WeatherLocation); zipMatch != "" {
+			zipcode = zipMatch
+		}
+		fmt.Println("Syncing upcoming races schedule for the next 5 months...")
+		syncFutureRacesRun(zipcode, 50, 5, vaultPath, cfg.ObsidianFolder, cfg.DistanceUnit)
+		return
+	}
+
 	if !cfg.IsGarminConfigured() && !cfg.IsStravaConfigured() {
 		fmt.Println("Error: Neither Garmin nor Strava is configured. Run 'running-cli setup' first.")
 		return
 	}
 
-	// 1. Resolve date range
-	var start, end time.Time
-	today := time.Now()
-	todayMidnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.Local)
-
-	if syncEndDate != "" {
-		end, err = time.Parse("2006-01-02", syncEndDate)
-		if err != nil {
-			fmt.Printf("Error: Invalid end date format. Use YYYY-MM-DD.\n")
-			return
-		}
-		// Make sure it includes the full end date (end of day)
-		end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, time.Local)
-	} else {
-		end = time.Date(today.Year(), today.Month(), today.Day(), 23, 59, 59, 0, time.Local)
+	start, end, err := resolveSyncRange(syncDays, syncStartDate, syncEndDate, time.Now())
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
 	}
 
-	if syncStartDate != "" {
-		start, err = time.Parse("2006-01-02", syncStartDate)
-		if err != nil {
-			fmt.Printf("Error: Invalid start date format. Use YYYY-MM-DD.\n")
-			return
-		}
-		start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.Local)
-	} else {
-		start = todayMidnight.AddDate(0, 0, -syncDays)
-	}
-
-	fmt.Printf("Syncing activities from %s to %s...\n", start.Format("2006-01-02"), end.Format("2006-01-02"))
-
-	// 2. Open DB
 	database, err := db.OpenDB()
 	if err != nil {
 		fmt.Printf("Error opening database: %v\n", err)
@@ -107,78 +119,17 @@ func runSync(cmd *cobra.Command, args []string) {
 	}
 	defer database.Close()
 
-	// 3. Fetch Garmin
-	if cfg.IsGarminConfigured() {
-		fmt.Println("Fetching Garmin activities...")
-		garminActs, err := client.FetchGarminActivities(cfg.Garmin.Email, "", start, end)
-		if err != nil {
-			fmt.Printf("  \033[0;31mGarmin fetch warning: %v\033[0m\n", err)
-		} else {
-			fmt.Printf("  Fetched %d Garmin activities.\n", len(garminActs))
-			for _, a := range garminActs {
-				// Skip if a Strava activity exists on this date
-				hasStrava, err := database.HasStravaActivityOnDate(a.StartTime, a.Sport)
-				if err == nil && hasStrava {
-					continue
-				}
-				if err := database.InsertOrUpdateActivity(a); err != nil {
-					fmt.Printf("  Error saving Garmin activity %d: %v\n", a.ID, err)
-				}
-			}
-		}
-	}
-
-	// 4. Fetch Strava
-	if cfg.IsStravaConfigured() {
-		fmt.Println("Fetching Strava activities...")
-		stravaActs, err := client.FetchStravaActivities(cfg.Strava.ClientID, cfg.Strava.ClientSecret, cfg.Strava.RefreshToken, start, end)
-		if err != nil {
-			fmt.Printf("  \033[0;31mStrava fetch warning: %v\033[0m\n", err)
-		} else {
-			fmt.Printf("  Fetched %d Strava activities.\n", len(stravaActs))
-			for _, a := range stravaActs {
-				if err := database.InsertOrUpdateActivity(a); err != nil {
-					fmt.Printf("  Error saving Strava activity %d: %v\n", a.ID, err)
-				} else {
-					// Remove matching Garmin activities to avoid duplicates
-					database.DeleteMatchingGarminActivity(a.StartTime, a.Sport)
-				}
-			}
-		}
-	}
-
-	// 5. Query all raw activities from DB and merge
-	gRaw, sRaw, err := database.GetRawActivitiesForSync(start, end)
+	result, err := syncActivities(cfg, database, start, end, func(format string, args ...interface{}) {
+		fmt.Printf(format, args...)
+	})
 	if err != nil {
-		fmt.Printf("Error reading raw activities from DB: %v\n", err)
+		fmt.Printf("Error: %v\n", err)
 		return
 	}
-
-	mergedList := merger.MergeActivities(gRaw, sRaw)
-	fmt.Printf("Merged into %d unique activities.\n", len(mergedList))
-
-	// 6. Clear and save merged activities in range
-	if err := database.ClearMergedActivitiesRange(start, end); err != nil {
-		fmt.Printf("Error clearing merged activities range: %v\n", err)
-		return
+	if len(result.NeedsAuth) > 0 {
+		fmt.Printf("\033[0;31mLogin needed for %s: run 'running-cli setup'.\033[0m\n", strings.Join(result.NeedsAuth, ", "))
 	}
-
-	for _, ma := range mergedList {
-		id, err := database.SaveMergedActivity(ma)
-		if err != nil {
-			fmt.Printf("Error saving merged activity: %v\n", err)
-		} else {
-			ma.ID = id
-		}
-	}
-
-	// 7. Auto link planned workouts with synced actual runs
-	linkedCount, err := database.AutoLinkWorkouts()
-	if err != nil {
-		fmt.Printf("Warning: Failed to auto-link workouts: %v\n", err)
-	} else if linkedCount > 0 {
-		fmt.Printf("Auto-linked %d synced activities to scheduled training plans.\n", linkedCount)
-	}
+	mergedList := result.merged
 
 	// 8. Generate notes (optional, off by default)
 	if cfg.EnableObsidian && vaultPath != "" {
@@ -532,12 +483,17 @@ func (rw *regexpWrapper) FindString(s string) string {
 func syncFutureRacesRun(zipcode string, radius, months int, vaultPath, folder, unit string) {
 	currentDT := time.Now()
 	startDate := time.Date(currentDT.Year(), currentDT.Month(), currentDT.Day(), 0, 0, 0, 0, time.Local)
-	endDate := startDate.AddDate(0, 0, months*30)
+	endDate := startDate.AddDate(0, months, 0)
 
-	fmt.Printf("  Resolving races within %d miles of ZIP %s...\n", radius, zipcode)
+	fmt.Printf("  Resolving races within %d miles of ZIP %s for next %d months...\n", radius, zipcode, months)
 	races, err := client.FetchFutureRaces(zipcode, radius, startDate, endDate)
 	if err != nil {
 		fmt.Printf("  Error fetching upcoming races: %v\n", err)
+		return
+	}
+
+	if len(races) == 0 {
+		fmt.Println("  No valid upcoming races found. Skipping update of FutureRaces.md per requirement.")
 		return
 	}
 
@@ -545,7 +501,7 @@ func syncFutureRacesRun(zipcode string, radius, months int, vaultPath, folder, u
 	dbConn, err := db.OpenDB()
 	if err == nil {
 		defer dbConn.Close()
-		dbConn.SaveFutureRaces(races)
+		_ = dbConn.SaveFutureRaces(races)
 	}
 
 	obsidianDir := filepath.Join(vaultPath, folder)
@@ -561,33 +517,43 @@ func syncFutureRacesRun(zipcode string, radius, months int, vaultPath, folder, u
 		data, _ := os.ReadFile(futureRacesPath)
 		fileContent = string(data)
 	} else {
-		fileContent = `---\ntype: race_schedule\nlast_updated: ""\n---\n\n# 🏃‍♂️ Future Races\n\nCurated list of upcoming races found by the Race Finder agent.\n\n%% START_FUTURE_RACES %%\n%% END_FUTURE_RACES %%\n\n## 📝 Custom Notes & Goals\n*Write your race targets, training schedules, or notes here. This section will be preserved when running the sync again.*\n`
+		fileContent = "---\ntype: race_schedule\nlast_updated: \"\"\nhome_location: \"Belmont, MA\"\n---\n\n# 🏃‍♂️ Future Races\n\nCurated list of upcoming races (5K, 10K, Half Marathon, Marathon) found by the Race Finder agent.\n\n%% START_FUTURE_RACES %%\n%% END_FUTURE_RACES %%\n\n## 📝 Custom Notes & Goals\n*Write your race targets, training schedules, or notes here. This section will be preserved when running the sync again.*\n"
 	}
 
 	// Build markdown table
-	tableHeaders := []string{"Date", "Sport/Distance", "Race Name", "Location", "Links"}
+	tableHeaders := []string{"Date", "Distance", "Race Name", "Price", "Status / Capacity", "Proximity (Belmont, MA)", "Location", "Link"}
 	var tableRows []string
 	tableRows = append(tableRows, "| "+strings.Join(tableHeaders, " | ")+" |")
-	tableRows = append(tableRows, "| "+strings.Join([]string{"---", "---", "---", "---", "---"}, " | ")+" |")
+	tableRows = append(tableRows, "| "+strings.Join([]string{"---", "---", "---", "---", "---", "---", "---", "---"}, " | ")+" |")
 
-	if len(races) == 0 {
-		tableRows = append(tableRows, "| - | - | No upcoming races found. | - | - |")
-	} else {
-		for _, r := range races {
-			dateStr := r.RaceDate.Format("Mon, Jan 02, 2006")
-			linkStr := fmt.Sprintf("[Website](%s)", r.WebsiteURL)
-			if r.WebsiteURL == "" {
-				linkStr = "-"
-			}
-			row := []string{dateStr, r.DistanceDisplay, r.Title, r.Location, linkStr}
-			tableRows = append(tableRows, "| "+strings.Join(row, " | ")+" |")
+	for _, r := range races {
+		dateStr := r.RaceDate.Format("Mon, Jan 02, 2006")
+		linkStr := fmt.Sprintf("[Website](%s)", r.WebsiteURL)
+		if r.WebsiteURL == "" {
+			linkStr = "-"
 		}
+		priceStr := r.Price
+		if priceStr == "" {
+			priceStr = "N/A"
+		}
+		statusStr := r.Status
+		if statusStr == "" {
+			statusStr = "Open"
+		}
+		proxStr := "-"
+		if r.ProximityMiles > 0 {
+			proxStr = fmt.Sprintf("%.1f mi", r.ProximityMiles)
+		}
+		row := []string{dateStr, r.DistanceDisplay, r.Title, priceStr, statusStr, proxStr, r.Location, linkStr}
+		tableRows = append(tableRows, "| "+strings.Join(row, " | ")+" |")
 	}
 
 	tableContent := strings.Join(tableRows, "\n")
 	frontmatter := map[string]interface{}{
-		"type":         "race_schedule",
-		"last_updated": currentDT.Format("2006-01-02 15:04:05"),
+		"type":          "race_schedule",
+		"last_updated":  currentDT.Format("2006-01-02 15:04:05"),
+		"home_location": "Belmont, MA",
+		"race_count":    len(races),
 	}
 
 	updatedContent := storage.SafeUpdateMarkdown(
