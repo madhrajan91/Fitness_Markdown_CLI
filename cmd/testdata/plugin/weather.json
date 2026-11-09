@@ -1,0 +1,4 @@
+{
+  "title": "Weather for Springfield",
+  "markdown": "| Day | Conditions | Low–High | Wind | Sunrise / Sunset | Best hour | RPE |\n| --- | --- | --- | --- | --- | --- | --- |\n| Sun 4 Oct | 🌧️ Slight Rain | 40–82°F | 20 mph | 06:51 / 18:22 | 07:00 | 0 Ideal |\n| Mon 5 Oct | ☁️ Overcast | 70–88°F | 12 mph | 06:52 / 18:20 | 12:00 | 10 Extreme |\n| Tue 6 Oct | ☀️ Clear | 55–70°F | 5 mph | 06:53 / 18:18 | - | - |\n"
+}

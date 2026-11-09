@@ -545,6 +545,24 @@ func runServer(cmd *cobra.Command, args []string) {
 		json.NewEncoder(w).Encode(forecast)
 	})
 
+	http.Handle("/plugin/", pluginRoutes{
+		Unit:       cfg.DistanceUnit,
+		Now:        time.Now,
+		Activities: database.GetMergedActivitiesForRange,
+		Weather: func(today time.Time) (runningWeather, string, error) {
+			lat, lon, location, err := resolveWeatherLocation(cfg, "", 0, 0, false)
+			if err != nil {
+				return runningWeather{}, "", err
+			}
+			start := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.Local)
+			forecast, err := client.FetchWeather(lat, lon, start, start.AddDate(0, 0, pluginWeatherDays-1), cfg.DistanceUnit)
+			if err != nil {
+				return runningWeather{}, "", err
+			}
+			return buildRunningWeather(forecast, cfg.DistanceUnit), location, nil
+		},
+	}.handler())
+
 	// Static Webapp Frontend File Server (SPA router fallback using embedded files)
 	subFS, err := fs.Sub(DashboardAssets, "dashboard/dist")
 	if err != nil {

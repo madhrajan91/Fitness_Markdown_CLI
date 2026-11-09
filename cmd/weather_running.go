@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	"running_cli/pkg/client"
@@ -87,7 +88,6 @@ func buildRunningWeather(forecast map[string]interface{}, unit string) runningWe
 
 	hourly, _ := forecast["hourly"].(map[string]interface{})
 	hourTimes, _ := hourly["time"].([]interface{})
-	bestByDate := map[string]int{} // date -> index into rw.Hours
 	for i := range hourTimes {
 		ts := seriesString(hourly, "time", i)
 		t, err := time.Parse("2006-01-02T15:04", ts)
@@ -120,11 +120,6 @@ func buildRunningWeather(forecast map[string]interface{}, unit string) runningWe
 			RPELabel:   label,
 			RPEDesc:    desc,
 		})
-
-		date := ts[:10]
-		if b, ok := bestByDate[date]; !ok || score < rw.Hours[b].RPE {
-			bestByDate[date] = len(rw.Hours) - 1
-		}
 	}
 
 	daily, _ := forecast["daily"].(map[string]interface{})
@@ -142,12 +137,37 @@ func buildRunningWeather(forecast map[string]interface{}, unit string) runningWe
 			Sunrise:   seriesString(daily, "sunrise", i),
 			Sunset:    seriesString(daily, "sunset", i),
 		}
-		if b, ok := bestByDate[date]; ok {
-			best := rw.Hours[b]
-			day.Best = &best
-		}
+		day.Best = bestHour(rw.Hours, date, day.Sunrise, day.Sunset)
 		rw.Days = append(rw.Days, day)
 	}
 
 	return rw
+}
+
+// bestHour is the date's hour of lowest RPE between sunrise and sunset, or from
+// all its hours if none falls in daylight. The coolest hour is usually before
+// dawn, which isn't when anyone means to run. Timestamps are all
+// YYYY-MM-DDTHH:MM, so they compare as strings.
+func bestHour(hours []runningHour, date, sunrise, sunset string) *runningHour {
+	var best, bestDaylight *runningHour
+	for i := range hours {
+		h := &hours[i]
+		if !strings.HasPrefix(h.Time, date) {
+			continue
+		}
+		if best == nil || h.RPE < best.RPE {
+			best = h
+		}
+		if h.Time >= sunrise && (sunset == "" || h.Time <= sunset) && (bestDaylight == nil || h.RPE < bestDaylight.RPE) {
+			bestDaylight = h
+		}
+	}
+	if bestDaylight != nil {
+		best = bestDaylight
+	}
+	if best == nil {
+		return nil
+	}
+	found := *best
+	return &found
 }

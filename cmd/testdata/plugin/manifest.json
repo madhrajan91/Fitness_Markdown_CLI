@@ -1,0 +1,16 @@
+{
+  "protocol": 1,
+  "name": "Running",
+  "views": [
+    {
+      "id": "week",
+      "title": "Week",
+      "pager": true
+    },
+    {
+      "id": "weather",
+      "title": "Weather",
+      "pager": false
+    }
+  ]
+}

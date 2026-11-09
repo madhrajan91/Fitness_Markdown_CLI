@@ -64,8 +64,19 @@ func TestBuildRunningWeather(t *testing.T) {
 	if d.Best == nil || d.Best.Time != "2026-10-04T07:00" {
 		t.Errorf("day 1 best = %+v", d.Best)
 	}
-	if rw.Days[1].Best == nil || rw.Days[1].Best.Time != "2026-10-05T06:00" {
+	// 06:00 has the lower RPE, but sunrise is at 06:52.
+	if rw.Days[1].Best == nil || rw.Days[1].Best.Time != "2026-10-05T12:00" {
 		t.Errorf("day 2 best = %+v", rw.Days[1].Best)
+	}
+	if rw.Days[1].Best != nil && rw.Days[1].Best.RPE <= rw.Hours[2].RPE {
+		t.Errorf("fixture no longer has a lower RPE before sunrise: %v, %v", rw.Days[1].Best.RPE, rw.Hours[2].RPE)
+	}
+	// No daylight hours in the data (or no sunrise): the best of what there is.
+	if got := bestHour(rw.Hours, "2026-10-05", "2026-10-05T13:00", "2026-10-05T14:00"); got == nil || got.Time != "2026-10-05T06:00" {
+		t.Errorf("no daylight hours: best = %+v", got)
+	}
+	if got := bestHour(rw.Hours, "2026-10-05", "", ""); got == nil || got.Time != "2026-10-05T06:00" {
+		t.Errorf("no sunrise or sunset: best = %+v", got)
 	}
 	// No hourly data for the third day: no best window.
 	if rw.Days[2].Best != nil {
