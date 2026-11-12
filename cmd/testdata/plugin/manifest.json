@@ -1,6 +1,7 @@
 {
   "protocol": 1,
   "name": "Running",
+  "start": "running-cli dashboard --port 8642 --no-browser",
   "views": [
     {
       "id": "week",

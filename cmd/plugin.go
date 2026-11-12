@@ -22,9 +22,12 @@ const pluginProtocol = 1
 
 const pluginWeatherDays = 7
 
+// pluginManifest describes the plugin. Start is the command that starts it: the
+// app keeps it and shows it when this server can't be reached.
 type pluginManifest struct {
 	Protocol int              `json:"protocol"`
 	Name     string           `json:"name"`
+	Start    string           `json:"start,omitempty"`
 	Views    []pluginViewInfo `json:"views"`
 }
 
@@ -46,6 +49,7 @@ type pluginView struct {
 // pluginRoutes holds what the views need, so tests can pass fakes.
 type pluginRoutes struct {
 	Unit       string
+	Start      string
 	Now        func() time.Time
 	Activities func(start, end time.Time) ([]*models.MergedActivity, error)
 	Weather    func(today time.Time) (runningWeather, string, error)
@@ -74,6 +78,7 @@ func (p pluginRoutes) handler() http.Handler {
 			writePluginJSON(w, pluginManifest{
 				Protocol: pluginProtocol,
 				Name:     "Running",
+				Start:    p.Start,
 				Views: []pluginViewInfo{
 					{ID: "week", Title: "Week", Pager: true},
 					{ID: "weather", Title: "Weather"},

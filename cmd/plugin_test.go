@@ -55,8 +55,9 @@ func sampleWeather(t *testing.T) runningWeather {
 func testPluginRoutes(t *testing.T) pluginRoutes {
 	t.Helper()
 	return pluginRoutes{
-		Unit: "miles",
-		Now:  func() time.Time { return at("2026-11-05 12:00") }, // a Thursday
+		Unit:  "miles",
+		Start: "running-cli dashboard --port 8642 --no-browser",
+		Now:   func() time.Time { return at("2026-11-05 12:00") }, // a Thursday
 		Activities: func(start, end time.Time) ([]*models.MergedActivity, error) {
 			var in []*models.MergedActivity
 			for _, a := range sampleActivities() {

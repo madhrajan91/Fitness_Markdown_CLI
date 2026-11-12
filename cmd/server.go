@@ -547,6 +547,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	http.Handle("/plugin/", pluginRoutes{
 		Unit:       cfg.DistanceUnit,
+		Start:      fmt.Sprintf("running-cli dashboard --host %s --port %d --no-browser", serverHost, serverPort),
 		Now:        time.Now,
 		Activities: database.GetMergedActivitiesForRange,
 		Weather: func(today time.Time) (runningWeather, string, error) {
